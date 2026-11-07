@@ -6,6 +6,7 @@ option(XAO_BUILD_TESTS "Build XAO core tests" ON)
 add_library(xao_core STATIC
     core/src/Image.cpp
     core/src/Compositor.cpp
+    core/src/Pipeline.cpp
 )
 target_include_directories(xao_core PUBLIC core/include)
 target_compile_features(xao_core PUBLIC cxx_std_17)
