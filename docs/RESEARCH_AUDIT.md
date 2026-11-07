@@ -70,6 +70,14 @@ The PiPL global OutFlags and OutFlags2 values do match the C++ GLOBAL_SETUP valu
 - Pointless: GPL-3.0. Do not incorporate its code into a proprietary XAO build unless the distribution/licensing model is deliberately made GPL-compliant. It may be studied for algorithm ideas.
 - ascii ofx and glyphblocks OFX folders require separate source/license inspection before reuse.
 
+### ASCII implementation notes
+- ASCII Art main (MIT) is a C++20/Qt/OpenCV desktop application, not an AE plugin. Its portable engine pieces include luminance, color handling, glyph mapping, edge-directional Sobel mapping, adaptive detail and unit tests. These are useful references for XAO's CPU core; the Qt/capture/UI layers are not part of the AE adapter.
+- AuraASCII (MIT) is a React/Three.js/WebGL2 project. Its two-pass edge buffer plus glyph-atlas sampling is a strong GPU architecture reference: pass 1 computes luminance/gradient magnitude/direction; pass 2 maps cells to a pre-rendered glyph atlas. Reimplement for AE rather than importing its web runtime.
+- morphing ascii shader (MIT) is shader-oriented and useful for glyph-atlas and transition concepts; inspect shader math independently before porting.
+- ascii ofx and glyphblocks ofx are OpenFX implementations and include a shared `../common/purzfx.hpp` dependency absent from the supplied archive. They cannot be built standalone from the archive as provided. Their algorithms can be studied; they are not native AE code.
+- The bundled `font8x8_basic.h` in ascii ofx is a fixed bitmap font. It must not replace the user's original TTF/OTF font assets. XAO's main glyph path should rasterize actual font files into atlases, with a separate optional bitmap-glyph mode only if desired.
+- Pointless is GPL-3.0 and contains extensive ASCII, halftone, dither, mosaic, animation and compositor code. It is a rich behavior reference, but do not copy its source into a proprietary XAO binary without a deliberate GPL-compliant licensing decision.
+
 ### Halftone
 - Halftone akam contains both LICENSE and LICENSE.md with different terms (MIT and a personal-use/non-commercial license). Treat as license-conflicted until clarified; do not copy code yet.
 - Halftone dean and Halftone lap have MIT license files and are candidates for selective reuse.
