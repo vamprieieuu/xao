@@ -1,0 +1,89 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+*.so.*
+
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+# ...but the bundled ffmpeg binary IS tracked on purpose
+!tools/ffmpeg.exe
+
+# Build directories
+build/
+Build/
+build-*/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+compile_commands.json
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*.swp
+
+# vcpkg
+vcpkg_installed/
+
+# debug information files
+*.dwo
+
+# test output & cache
+Testing/
+.cache/
+
+# Qt Creator local state
+.qtcreator/
+*.user
+
+# UI capture / debug artifacts (tools/capture.ps1)
+/capture.png
+/font_check.png
+/pass*.png
+/scale_debug.txt
+
+CLAUDE.md
+handoff.md
+layer-chain-handoff.md
+
+# fetched by tools/fetch-ffmpeg.ps1, not committed (was 97MB, near GitHub's
+# 100MB hard limit)
+/tools/ffmpeg.exe

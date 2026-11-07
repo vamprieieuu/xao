@@ -1,0 +1,123 @@
+<!--
+  Halftone Studio panel.
+
+  The markup is intentionally minimal: every control is built at runtime from
+  src/state/params.js so the panel and the engine can never disagree about what
+  parameters exist. What is here is the chrome around them - header, preview,
+  actions, presets - which has no schema to be generated from.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="src/ui/styles.css" />
+  </head>
+  <body>
+    <!--
+      Two regions, and the split is the point: #head never scrolls, so the
+      preview stays on screen while you work through the controls in #scroll
+      underneath it. Adjusting a slider you cannot see the effect of is not
+      adjusting anything.
+    -->
+    <div id="app">
+      <div id="head">
+        <div class="brand">
+          <div class="brand-mark">
+            <div class="brand-dot brand-dot-1"></div>
+            <div class="brand-dot brand-dot-2"></div>
+            <div class="brand-dot brand-dot-3"></div>
+            <div class="brand-dot brand-dot-4"></div>
+          </div>
+          <div class="brand-name">
+            <span class="brand-name-a">HALFTONE</span><span class="brand-name-b">STUDIO</span>
+          </div>
+          <div id="brand-mode" class="brand-mode">Halftone</div>
+        </div>
+        <div class="rule"></div>
+
+        <div id="preview-wrap" class="preview-wrap">
+          <div id="preview-empty" class="preview-empty">
+            Select a layer, then press <b>Load Layer</b>
+          </div>
+          <img id="preview" class="preview" />
+          <!--
+            The split compare overlay. The original is drawn on top of the
+            render and clipped to the left of the handle, so both are on screen
+            at once against the same edge - which is what makes a difference
+            visible at all. Hidden until Compare is switched on.
+          -->
+          <div id="split" class="split">
+            <div id="split-clip" class="split-clip">
+              <img id="split-img" class="split-img" />
+            </div>
+            <div id="split-handle" class="split-handle"><div class="split-grip"></div></div>
+          </div>
+          <div id="preview-badge" class="preview-badge"></div>
+        </div>
+        <div id="preview-grip" class="preview-grip" title="Drag to resize the preview, double-click to reset">
+          <div class="grip-line"></div>
+        </div>
+
+        <div class="zoombar">
+          <button id="btn-zoom-out" class="zoom-btn" title="Zoom out">−</button>
+          <button id="btn-zoom-in" class="zoom-btn" title="Zoom in">+</button>
+          <div id="zoom-level" class="zoom-level">Fit</div>
+          <button id="btn-zoom-fit" class="zoom-btn zoom-word">Fit</button>
+          <button id="btn-zoom-1" class="zoom-btn zoom-word" title="One output pixel per document pixel">1:1</button>
+          <button id="btn-theatre" class="zoom-btn zoom-word" title="Give the whole panel to the preview — float the panel and resize it for a large view">Full</button>
+        </div>
+
+        <div id="status" class="status">
+          <span id="status-dot" class="status-dot"></span>
+          <span id="status-text">Starting…</span>
+        </div>
+
+        <div id="progress" class="progress"><div id="progress-bar" class="progress-bar"></div></div>
+
+        <div class="actions">
+          <!--
+            The output mode lives here, not only in the Output section, because
+            this is where the decision is made: it says what pressing Apply will
+            build, right next to the button that builds it.
+          -->
+          <div id="output-mode" class="output-mode"></div>
+          <div class="toolbar">
+            <button id="btn-load" class="btn">Load Layer</button>
+            <button id="btn-apply" class="btn btn-primary">Apply</button>
+            <button id="btn-update" class="btn">Update</button>
+          </div>
+          <div class="toolbar toolbar-tail">
+            <button id="btn-compare" class="btn btn-small">Compare</button>
+            <button id="btn-batch" class="btn btn-small">Batch Apply</button>
+            <button id="btn-svg" class="btn btn-small">Export SVG</button>
+          </div>
+          <div class="toolbar toolbar-tail">
+            <button id="btn-plates" class="btn btn-small">Export Plates</button>
+          </div>
+          <div class="toolbar toolbar-tail">
+            <button id="btn-cancel" class="btn btn-small btn-cancel">Stop After This Layer</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="scroll">
+        <div id="sections" class="sections"></div>
+
+        <div class="preset-bar">
+          <div class="bar-label"><span class="bar-tick"></span>Presets</div>
+          <div class="preset-row">
+            <div id="preset-list" class="preset-list"></div>
+          </div>
+          <div class="toolbar">
+            <button id="btn-save-preset" class="btn btn-small">Save</button>
+            <button id="btn-load-preset" class="btn btn-small">Load</button>
+            <button id="btn-reset" class="btn btn-small">Reset All</button>
+          </div>
+        </div>
+
+        <div id="notice" class="notice"></div>
+      </div>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>

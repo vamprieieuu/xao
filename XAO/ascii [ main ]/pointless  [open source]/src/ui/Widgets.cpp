@@ -1,0 +1,2100 @@
+#include "Widgets.h"
+#include "Theme.h"
+
+#include <QApplication>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QProgressBar>
+#include <QPainter>
+#include <QPaintEvent>
+#include <QMouseEvent>
+#include <QKeyEvent>
+#include <QFocusEvent>
+#include <QWheelEvent>
+#include <QScreen>
+#include <QCursor>
+#include <QPixmap>
+#include <QImage>
+#include <QPointer>
+#include <QIcon>
+#include <QEvent>
+#include <QGuiApplication>
+#include <QPainterPath>
+#include <QStyle>
+#include <QScrollBar>
+#include <QAbstractScrollArea>
+#include <QScrollArea>
+#include <QGridLayout>
+#include <QHideEvent>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
+#include <QTimer>
+#include <QFontMetrics>
+#include <QResizeEvent>
+#include <QSvgRenderer>
+#include <QSplitter>
+#include <QTransform>
+#include <QHash>
+#include <QtMath>
+#include <cmath>
+
+// ============================================================
+//  NoWheel*
+// ============================================================
+
+void NoWheelSlider::wheelEvent(QWheelEvent* e)   { e->ignore(); }
+
+// ============================================================
+//  DragSpinBox
+// ============================================================
+
+DragSpinBox::DragSpinBox(const QString& iconRes, int minVal, int maxVal, int defVal,
+                         const QString& suffix, QWidget* parent)
+    : QFrame(parent), m_min(minVal), m_max(maxVal), m_value(defVal), m_suffix(suffix)
+{
+    setObjectName("dragSpinBox");
+    setFrameShape(QFrame::NoFrame);
+    setCursor(handleCursor(1, 0, 0.0, true));
+    setFixedHeight(Ui::px(Ui::kBoxH));
+    setFocusPolicy(Qt::StrongFocus);   // reachable via Tab (left→right, top→bottom)
+
+    auto* lay = new QHBoxLayout(this);
+    lay->setContentsMargins(Ui::px(10), Ui::px(6), Ui::px(10), Ui::px(6));
+    lay->setSpacing(Ui::px(6));
+
+    const bool hasIcon = !iconRes.isEmpty();
+    if (hasIcon) {
+        m_iconLbl = new QLabel(this);
+        m_iconLbl->setPixmap(QIcon(iconRes).pixmap(Ui::px(16), Ui::px(16)));
+        m_iconLbl->setFixedSize(Ui::px(16), Ui::px(16));
+        m_iconLbl->setStyleSheet("background:transparent;");
+        m_iconLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+        lay->addWidget(m_iconLbl);
+    }
+
+    // The value is shown by a read-only QLineEdit that doubles as the editor.
+    // Read-only + transparent-for-mouse → clicks/drags pass through to the frame;
+    // it becomes the box's focus proxy so Tab stops here exactly once.
+    m_valueEdit = new QLineEdit(this);
+    m_valueEdit->setObjectName("dragSpinValue");   // QSS: transparent, color, size
+    m_valueEdit->setReadOnly(true);
+    m_valueEdit->setFrame(false);
+    m_valueEdit->setContextMenuPolicy(Qt::NoContextMenu);
+    m_valueEdit->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_valueEdit->setAlignment(Qt::AlignVCenter | (hasIcon ? Qt::AlignRight : Qt::AlignHCenter));
+    m_valueEdit->installEventFilter(this);
+    connect(m_valueEdit, &QLineEdit::editingFinished, this, [this]() { commitEdit(); });
+    lay->addWidget(m_valueEdit, 1);
+
+    setFocusProxy(m_valueEdit);
+    updateDisplay();
+}
+
+void DragSpinBox::setValue(int v)
+{
+    m_value = qBound(m_min, v, m_max);
+    updateDisplay();
+}
+
+void DragSpinBox::setRange(int minVal, int maxVal)
+{
+    m_min = minVal;
+    m_max = maxVal;
+    setValue(m_value);   // re-clamp to the new bounds and redraw
+}
+
+void DragSpinBox::setAnimated(bool on)
+{
+    setProperty("animated", on);
+    style()->unpolish(this);
+    style()->polish(this);
+}
+
+void DragSpinBox::setTextLabel(const QString& text)
+{
+    if (!m_iconLbl) {
+        m_iconLbl = new QLabel(this);
+        m_iconLbl->setObjectName("dragSpinLetter");   // QSS: color, size, weight
+        m_iconLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+        static_cast<QHBoxLayout*>(layout())->insertWidget(0, m_iconLbl);
+    }
+    m_iconLbl->setText(text);
+    // Value sits just after the letter, left-aligned.
+    m_valueEdit->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+}
+
+void DragSpinBox::mousePressEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton) {
+        m_dragging = true;
+        m_dragStart = e->globalPosition().toPoint();
+        m_dragStartVal = m_value;
+    }
+}
+
+void DragSpinBox::mouseMoveEvent(QMouseEvent* e)
+{
+    if (!m_dragging) return;
+    int dx = e->globalPosition().toPoint().x() - m_dragStart.x();
+    int nv = qBound(m_min, m_dragStartVal + dx / 2, m_max);
+    if (nv != m_value) {
+        m_value = nv;
+        updateDisplay();
+        if (onValueChanged) onValueChanged(m_value);
+    }
+}
+
+void DragSpinBox::mouseReleaseEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton) m_dragging = false;
+}
+
+void DragSpinBox::mouseDoubleClickEvent(QMouseEvent* e)
+{
+    if (e->button() != Qt::LeftButton) return;
+    beginEdit();
+}
+
+bool DragSpinBox::eventFilter(QObject* o, QEvent* e)
+{
+    if (o == m_valueEdit) {
+        if (e->type() == QEvent::FocusIn) {
+            // Tabbed in → start editing immediately; a click just focuses (drag stays).
+            auto reason = static_cast<QFocusEvent*>(e)->reason();
+            if (reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason)
+                beginEdit();
+        } else if (e->type() == QEvent::FocusOut) {
+            commitEdit();
+        }
+    }
+    return QFrame::eventFilter(o, e);
+}
+
+void DragSpinBox::beginEdit()
+{
+    if (!m_valueEdit->isReadOnly()) return;
+    m_valueEdit->setReadOnly(false);
+    m_valueEdit->setAttribute(Qt::WA_TransparentForMouseEvents, false);
+    m_valueEdit->setText(QString::number(m_value));
+    m_valueEdit->setFocus(Qt::OtherFocusReason);
+    m_valueEdit->selectAll();
+    setProperty("editing", true);
+    style()->unpolish(this);
+    style()->polish(this);
+}
+
+void DragSpinBox::commitEdit()
+{
+    if (m_valueEdit->isReadOnly()) return;
+    bool ok; int v = m_valueEdit->text().toInt(&ok);
+    if (ok) { setValue(v); if (onValueChanged) onValueChanged(m_value); }
+    m_valueEdit->setReadOnly(true);
+    m_valueEdit->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_valueEdit->deselect();
+    updateDisplay();
+    setProperty("editing", false);
+    style()->unpolish(this);
+    style()->polish(this);
+}
+
+void DragSpinBox::updateDisplay()
+{
+    if (m_valueEdit && m_valueEdit->isReadOnly())
+        m_valueEdit->setText(QString::number(m_value) + m_suffix);
+}
+
+// ============================================================
+//  SliderRow
+// ============================================================
+
+SliderRow::SliderRow(const QString& label, int minVal, int maxVal, int defVal,
+                     QWidget* parent)
+    : QWidget(parent)
+{
+    // Title + slider stacked on the left; the value box on the right, centred
+    // vertically over the whole (title + slider) block.
+    auto* outer = new QHBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(Ui::px(Ui::kGapTwinBoxes));
+
+    auto* leftCol = new QVBoxLayout;
+    leftCol->setContentsMargins(0, 0, 0, 0);
+    leftCol->setSpacing(Ui::px(Ui::kGapLabelToCtrl));
+    if (!label.isEmpty()) {
+        auto* lbl = makeParamLabel(label);
+        leftCol->addWidget(lbl);
+    }
+
+    m_slider = new NoWheelSlider(Qt::Horizontal);
+    m_slider->setRange(minVal, maxVal);
+    m_slider->setValue(defVal);
+    m_slider->setFixedHeight(Ui::px(30));
+    leftCol->addWidget(m_slider);
+
+    m_box = new DragSpinBox(QString(), minVal, maxVal, defVal);
+    m_box->setFixedSize(Ui::px(Ui::kCellW), Ui::px(Ui::kBoxH));
+
+    outer->addLayout(leftCol, 1);
+    outer->addWidget(m_box, 0, Qt::AlignVCenter);
+
+    connect(m_slider, &QSlider::valueChanged, this, [this](int v) {
+        if (m_updating) return;
+        m_updating = true;
+        m_box->setValue(v);
+        m_updating = false;
+        if (onValueChanged) onValueChanged(v);
+    });
+    m_box->onValueChanged = [this](int v) {
+        if (m_updating) return;
+        m_updating = true;
+        m_slider->blockSignals(true);
+        m_slider->setValue(v);
+        m_slider->blockSignals(false);
+        m_updating = false;
+        if (onValueChanged) onValueChanged(v);
+    };
+}
+
+int SliderRow::value() const { return m_slider->value(); }
+
+void SliderRow::setValue(int v)
+{
+    m_updating = true;
+    m_slider->blockSignals(true);
+    m_slider->setValue(v);
+    m_slider->blockSignals(false);
+    m_box->setValue(m_slider->value());
+    m_updating = false;
+}
+
+void SliderRow::setRange(int minVal, int maxVal)
+{
+    m_updating = true;
+    const int v = qBound(minVal, m_slider->value(), maxVal);
+    m_slider->blockSignals(true);
+    m_slider->setRange(minVal, maxVal);
+    m_slider->setValue(v);
+    m_slider->blockSignals(false);
+    m_box->setRange(minVal, maxVal);
+    m_box->setValue(v);
+    m_updating = false;
+}
+
+void SliderRow::setAnimated(bool on)
+{
+    m_box->setAnimated(on);
+}
+
+// ============================================================
+//  LevelsWidget
+// ============================================================
+
+namespace {
+    static constexpr int kLvHistH   = 60;   // rounded histogram box height (was 92)
+    static constexpr int kLvStripH  = 16;   // handle strip below the box
+    static constexpr int kLvTrackH  = kLvHistH + kLvStripH;   // interactive zone
+    static constexpr int kLvRadius  = 10;   // histogram box corner radius
+    static constexpr int kLvHandleW = 13;   // handle base width (odd)
+    static constexpr int kLvMarginX = 8;    // side padding (handles stay inside)
+    static constexpr int kLvGap     = 6;
+} // namespace
+
+LevelsWidget::LevelsWidget(QWidget* parent)
+    : QWidget(parent)
+{
+    // Input boxes are full standard height (DragSpinBox's own default, same
+    // as every other box in the app) rather than the old compact/short
+    // variant, which read as a stray undersized control next to its
+    // full-height neighbours.
+    const int boxH = Ui::px(Ui::kBoxH);
+    setFixedHeight(kLvTrackH + kLvGap + boxH);
+    setCursor(handleCursor(1, 0, 0.0, true));
+
+    // Layout only occupies the bottom strip; top is custom-painted.
+    auto* vl = new QVBoxLayout(this);
+    vl->setContentsMargins(0, kLvTrackH + kLvGap, 0, 0);
+    vl->setSpacing(0);
+
+    auto* row = new QHBoxLayout;
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(10);
+    m_boxBlack = new DragSpinBox("", 0,   255,   0, "", this);
+    m_boxMid   = new DragSpinBox("", 10,  500, 100, "", this);
+    m_boxWhite = new DragSpinBox("", 0,   255, 255, "", this);
+    for (DragSpinBox* b : { m_boxBlack, m_boxMid, m_boxWhite })
+        b->setFixedWidth(Ui::px(Ui::kCellW));   // same width as every other box's value cell
+    // Fixed-width boxes with stretch between/around them so they still sit
+    // roughly under their black/mid/white handles instead of each claiming
+    // an equal third of the full row (which made them much wider than every
+    // other box in the app).
+    row->addWidget(m_boxBlack);
+    row->addStretch(1);
+    row->addWidget(m_boxMid);
+    row->addStretch(1);
+    row->addWidget(m_boxWhite);
+    vl->addLayout(row);
+
+    auto boxChanged = [this](int) {
+        if (m_updating) return;
+        m_black = qBound(0,  m_boxBlack->value(), 254);
+        m_white = qBound(m_black + 1, m_boxWhite->value(), 255);
+        m_mid   = qBound(10, m_boxMid->value(), 500);
+        syncBoxes();
+        update();
+        if (onChanged) onChanged();
+    };
+    m_boxBlack->onValueChanged = boxChanged;
+    m_boxMid->onValueChanged   = boxChanged;
+    m_boxWhite->onValueChanged = boxChanged;
+}
+
+float LevelsWidget::valToX(int v) const
+{
+    const float usable = float(width()) - 2.0f * kLvMarginX;
+    return kLvMarginX + v * usable / 255.0f;
+}
+
+int LevelsWidget::xToVal(float x) const
+{
+    const float usable = float(width()) - 2.0f * kLvMarginX;
+    if (usable <= 0.0f) return 0;
+    return qBound(0, int(std::round((x - kLvMarginX) * 255.0f / usable)), 255);
+}
+
+float LevelsWidget::midFracFrom(int midV) const
+{
+    // mid=100 → 0.5 (centre), mid→10 → 0.0 (left/dark), mid=500 → 1.0 (right/bright)
+    const float t = std::log(midV / 100.0f) / std::log(5.0f);
+    return qBound(0.0f, 0.5f + t * 0.5f, 1.0f);
+}
+
+float LevelsWidget::midPixX() const
+{
+    const float bx   = valToX(m_black);
+    const float wx   = valToX(m_white);
+    const float span = wx - bx;
+    return (span > 0.5f) ? bx + midFracFrom(m_mid) * span : (bx + wx) * 0.5f;
+}
+
+int LevelsWidget::midValFromX(float x) const
+{
+    const float bx   = valToX(m_black);
+    const float wx   = valToX(m_white);
+    const float span = wx - bx;
+    if (span < 1.0f) return 100;
+    const float frac = qBound(0.0f, (x - bx) / span, 1.0f);
+    const float t    = (frac - 0.5f) * 2.0f;
+    return qBound(10, int(std::round(100.0f * std::pow(5.0f, t))), 500);
+}
+
+LevelsWidget::Handle LevelsWidget::hitTest(QPoint pos) const
+{
+    if (pos.y() < kLvHistH - 4 || pos.y() > kLvTrackH + 2) return Handle::None;
+    const float bx = valToX(m_black);
+    const float wx = valToX(m_white);
+    const float mx = midPixX();
+    const float r  = float(kLvHandleW) * 0.7f;
+    if (std::fabs(float(pos.x()) - mx) <= r) return Handle::Mid;
+    if (std::fabs(float(pos.x()) - bx) <= r) return Handle::Black;
+    if (std::fabs(float(pos.x()) - wx) <= r) return Handle::White;
+    return Handle::None;
+}
+
+void LevelsWidget::drawHandle(QPainter& p, float x, Handle h, bool active)
+{
+    // Photoshop-style "house" pentagon pointing up at the histogram box.
+    const float tipY      = float(kLvHistH) + 2.0f;
+    const float shoulderY = tipY + 5.0f;
+    const float baseY     = float(kLvTrackH) - 1.0f;
+    const float hw        = float(kLvHandleW) * 0.5f;
+
+    const QPolygonF pent = QPolygonF()
+        << QPointF(x - hw, baseY)
+        << QPointF(x - hw, shoulderY)
+        << QPointF(x, tipY)
+        << QPointF(x + hw, shoulderY)
+        << QPointF(x + hw, baseY);
+
+    QColor fill, stroke;
+    switch (h) {
+        case Handle::Black:
+            fill   = Ui::kColLocOliveDark;
+            stroke = Ui::kColLocOliveStroke;
+            break;
+        case Handle::Mid:
+            fill   = Ui::kColLocOliveStroke;
+            stroke = Ui::kColLocOliveStroke;
+            break;
+        case Handle::White:
+            fill   = Ui::kColLocLime;
+            stroke = Ui::kColLocOliveStroke2;
+            break;
+        default: return;
+    }
+
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(stroke, 1.0f));
+    p.setBrush(fill);
+    p.drawPolygon(pent);
+}
+
+void LevelsWidget::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    const int w = width();
+
+    // Rounded histogram box
+    const QRectF box(0.5, 0.5, w - 1.0, kLvHistH - 1.0);
+    QPainterPath boxPath;
+    boxPath.addRoundedRect(box, kLvRadius, kLvRadius);
+    p.setPen(QPen(Ui::kColSurface2, 1));
+    p.setBrush(Ui::kColBgPanel);
+    p.drawPath(boxPath);
+
+    // Histogram (log-scaled, light fill rising from the bottom of the box)
+    if (m_hasHistogram) {
+        float maxLog = 0.0f;
+        for (int i = 0; i < 256; ++i)
+            maxLog = std::max(maxLog, std::log1p(float(m_histogram[i])));
+
+        if (maxLog > 0.0f) {
+            // Plot across the full box width (not inset by kLvMarginX, which
+            // is only needed so the handles below stay clear of the rounded
+            // corners) — the clip to boxPath below already tapers the fill
+            // into the rounding, so a manual inset here just left a flat
+            // vertical gap before the curve instead of following it.
+            const float bottomY = float(kLvHistH) - 1.0f;
+            const float barH    = float(kLvHistH) - 10.0f;
+
+            QPolygonF poly;
+            poly.reserve(258);
+            poly << QPointF(0.0f, bottomY);
+            for (int i = 0; i < 256; ++i) {
+                const float x = i * float(w) / 255.0f;
+                const float t = std::log1p(float(m_histogram[i])) / maxLog;
+                poly << QPointF(x, bottomY - t * barH);
+            }
+            poly << QPointF(float(w), bottomY);
+
+            p.save();
+            p.setClipPath(boxPath);
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(210, 252, 81, 51));
+            p.drawPolygon(poly);
+            // Stroke only the top curve (skip the baseline corners) so the
+            // box's own gray bottom border isn't painted over in lime.
+            p.setPen(QPen(Ui::kColSelectStroke, 1.5));
+            p.setBrush(Qt::NoBrush);
+            p.drawPolyline(poly.constData() + 1, poly.size() - 2);
+            p.restore();
+        }
+    }
+
+    // Handles below the box (black + white behind, mid on top)
+    drawHandle(p, valToX(m_black), Handle::Black, m_dragging == Handle::Black);
+    drawHandle(p, valToX(m_white), Handle::White, m_dragging == Handle::White);
+    drawHandle(p, midPixX(),       Handle::Mid,   m_dragging == Handle::Mid);
+}
+
+void LevelsWidget::mousePressEvent(QMouseEvent* e)
+{
+    if (e->button() != Qt::LeftButton) return;
+    if (e->pos().y() > kLvTrackH) return;
+    m_dragging = hitTest(e->pos());
+    if (m_dragging != Handle::None) {
+        m_dragStart      = e->pos();
+        m_dragStartBlack = m_black;
+        m_dragStartMid   = m_mid;
+        m_dragStartWhite = m_white;
+        e->accept();
+    }
+}
+
+void LevelsWidget::mouseMoveEvent(QMouseEvent* e)
+{
+    if (m_dragging == Handle::None) return;
+    const float dx = float(e->pos().x() - m_dragStart.x());
+
+    switch (m_dragging) {
+        case Handle::Black:
+            m_black = qBound(0, xToVal(valToX(m_dragStartBlack) + dx), m_white - 1);
+            break;
+        case Handle::White:
+            m_white = qBound(m_black + 1, xToVal(valToX(m_dragStartWhite) + dx), 255);
+            break;
+        case Handle::Mid: {
+            const float origMX = valToX(m_black)
+                               + midFracFrom(m_dragStartMid)
+                               * (valToX(m_white) - valToX(m_black));
+            const float newMX  = qBound(valToX(m_black), origMX + dx, valToX(m_white));
+            m_mid = midValFromX(newMX);
+            break;
+        }
+        default: break;
+    }
+
+    update();
+    syncBoxes();
+    if (onChanged) onChanged();
+}
+
+void LevelsWidget::mouseReleaseEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton && m_dragging != Handle::None) {
+        m_dragging = Handle::None;
+        update();
+    }
+}
+
+void LevelsWidget::syncBoxes()
+{
+    m_updating = true;
+    m_boxBlack->setValue(m_black);
+    m_boxMid->setValue(m_mid);
+    m_boxWhite->setValue(m_white);
+    m_updating = false;
+}
+
+void LevelsWidget::setHistogram(const std::array<int,256>& h)
+{
+    m_histogram = h;
+    m_hasHistogram = false;
+    for (int v : h) if (v > 0) { m_hasHistogram = true; break; }
+    update();
+}
+
+void LevelsWidget::setValues(int black, int mid, int white)
+{
+    m_black = qBound(0,  black, 254);
+    m_white = qBound(m_black + 1, white, 255);
+    m_mid   = qBound(10, mid, 500);
+    syncBoxes();
+    update();
+}
+
+// ============================================================
+//  ChevronButton
+// ============================================================
+
+ChevronButton::ChevronButton(Direction dir, QWidget* parent)
+    : QPushButton(parent), m_dir(dir)
+{
+    setObjectName("iconBtn");
+    setFixedSize(Ui::px(24), Ui::px(24));
+    setCursor(appCursor());
+}
+
+void ChevronButton::setDirection(Direction dir)
+{
+    m_dir = dir;
+    update();
+}
+
+void ChevronButton::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    if (underMouse()) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(Ui::kColSurface2);
+        p.drawRoundedRect(rect(), 4, 4);
+    }
+
+    QPen pen(Ui::kColTextLabel, 1.6);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+
+    const QPointF c(width() / 2.0, height() / 2.0);
+    const qreal s = 3.5;
+    QPolygonF poly;
+    switch (m_dir) {
+        case Up:    poly << QPointF(c.x() - s, c.y() + s/2) << QPointF(c.x(), c.y() - s/2) << QPointF(c.x() + s, c.y() + s/2); break;
+        case Down:  poly << QPointF(c.x() - s, c.y() - s/2) << QPointF(c.x(), c.y() + s/2) << QPointF(c.x() + s, c.y() - s/2); break;
+        case Left:  poly << QPointF(c.x() + s/2, c.y() - s) << QPointF(c.x() - s/2, c.y()) << QPointF(c.x() + s/2, c.y() + s); break;
+        case Right: poly << QPointF(c.x() - s/2, c.y() - s) << QPointF(c.x() + s/2, c.y()) << QPointF(c.x() - s/2, c.y() + s); break;
+    }
+    p.drawPolyline(poly);
+}
+
+// ============================================================
+//  FillSwatch
+// ============================================================
+
+FillSwatch::FillSwatch(QColor color, float opacity, bool showOpacity, QWidget* parent)
+    : QWidget(parent), m_color(color), m_opacity(opacity), m_showOpacity(showOpacity)
+{
+    setFixedHeight(Ui::px(Ui::kBoxH));
+    setCursor(appCursor());
+    setAttribute(Qt::WA_Hover, true);   // so paintEvent's underMouse() repaints on hover
+
+    // Selectable / hand-editable hex value over the painted area.
+    m_hexEdit = new QLineEdit(this);
+    m_hexEdit->setFrame(false);
+    m_hexEdit->setMaxLength(7);   // allow leading '#'
+    m_hexEdit->setCursor(Qt::IBeamCursor);
+    m_hexEdit->setStyleSheet(QString(
+        "QLineEdit { background: transparent; border: none; color: %2;"
+        " padding: 0; margin: 0; min-height: 0; font-size: %1px; font-weight:500; }")
+        .arg(Ui::px(16)).arg(Ui::kColTextBody.name()));
+    syncHexText();
+
+    connect(m_hexEdit, &QLineEdit::returnPressed, m_hexEdit, [this]() {
+        m_hexEdit->clearFocus();   // triggers editingFinished
+    });
+    connect(m_hexEdit, &QLineEdit::editingFinished, m_hexEdit, [this]() {
+        const QString txt = m_hexEdit->text().trimmed().remove('#');
+        if (txt.length() == 6) {
+            const QColor parsed(QString("#") + txt);
+            if (parsed.isValid() && parsed != m_color) {
+                m_color = parsed;
+                update();
+                if (onColorEdited) onColorEdited(m_color);
+            }
+        }
+        syncHexText();   // normalise display (or revert invalid input)
+    });
+}
+
+void FillSwatch::setColor(QColor c)   { m_color = c; syncHexText(); update(); }
+void FillSwatch::setOpacity(float op) { m_opacity = qBound(0.f, op, 1.f); update(); }
+
+void FillSwatch::syncHexText()
+{
+    m_hexEdit->blockSignals(true);
+    m_hexEdit->setText(m_color.name().mid(1).toUpper());
+    m_hexEdit->blockSignals(false);
+}
+
+void FillSwatch::placeHexEdit()
+{
+    const int padH   = Ui::px(8);
+    const int sqSize = Ui::px(22);
+    const int textX  = padH + sqSize + Ui::px(8);
+    const int divX   = m_showOpacity ? dividerX() : width() - padH;
+    m_hexEdit->setGeometry(textX, 0, qMax(Ui::px(10), divX - textX - Ui::px(4)), height());
+}
+
+void FillSwatch::resizeEvent(QResizeEvent*)
+{
+    placeHexEdit();
+}
+
+int FillSwatch::dividerX() const { return width() - Ui::px(66); }   // room for "100%" after the line
+
+void FillSwatch::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    // Same box language as every other box: transparent fill, @boxStroke
+    // border, @boxStrokeHover on hover (kept as literals here — this is raw
+    // QPainter, not QSS). Half-pixel-adjusted rect for a crisp antialiased
+    // 1px line, same technique as TextColorSwatch.
+    const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    p.setPen(QPen(underMouse() ? QColor(0x61, 0x61, 0x61) : QColor(0x3D, 0x3D, 0x3D), 1));
+    p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(r, Ui::px(8), Ui::px(8));
+
+    const int h      = height();
+    const int padH   = Ui::px(8);
+    const int sqSize = Ui::px(22);
+    const int sqY    = (h - sqSize) / 2;
+
+    // Checkerboard behind the chip when semi-transparent
+    if (m_showOpacity && m_opacity < 0.999f) {
+        p.setPen(Qt::NoPen);
+        const int cs = Ui::px(5);
+        for (int xx = 0; xx < sqSize; xx += cs)
+            for (int yy = 0; yy < sqSize; yy += cs)
+                p.fillRect(padH + xx, sqY + yy, qMin(cs, sqSize - xx), qMin(cs, sqSize - yy),
+                           ((xx / cs + yy / cs) % 2) ? QColor(150,150,150) : QColor(90,90,90));
+    }
+
+    QColor chip = m_color;
+    if (m_showOpacity) chip.setAlphaF(m_opacity);
+    p.setPen(Qt::NoPen);
+    p.setBrush(chip);
+    p.drawRoundedRect(QRectF(padH, sqY, sqSize, sqSize), Ui::px(4), Ui::px(4));
+
+    QFont f;
+    f.setFamilies({"Funnel Display", "Segoe UI", "Arial"});
+    f.setPixelSize(Ui::px(15));
+    f.setWeight(QFont::Medium);
+    p.setFont(f);
+
+    const int divX = m_showOpacity ? dividerX() : width() - padH;
+
+    // Hex value is shown by the embedded QLineEdit (selectable/editable).
+
+    if (m_showOpacity) {
+        int divH   = Ui::px(28);
+        int divTop = (h - divH) / 2;
+        p.setPen(QPen(Ui::kColBgPanel, 1));
+        p.drawLine(divX, divTop, divX, divTop + divH);
+
+        p.setPen(Ui::kColTextBody);
+        p.setFont(f);
+        p.drawText(QRect(divX + 1, 0, width() - divX - 1 - padH, h),
+                   Qt::AlignVCenter | Qt::AlignCenter,
+                   QString::number(qRound(m_opacity * 100)) + "%");
+    }
+}
+
+void FillSwatch::mouseReleaseEvent(QMouseEvent* e)
+{
+    // Opacity is edited only from the color picker; the chip just opens it.
+    if (e->button() == Qt::LeftButton && onClicked) onClicked();
+}
+
+void FillSwatch::enterEvent(QEnterEvent*) { update(); }
+void FillSwatch::leaveEvent(QEvent*)       { update(); }
+
+// ============================================================
+//  Color picker internals
+// ============================================================
+
+class ColorFieldWidget : public QWidget {
+public:
+    std::function<void(float s, float v)> onChanged;
+    explicit ColorFieldWidget(QWidget* p = nullptr) : QWidget(p) {
+        setMinimumSize(Ui::px(200), Ui::px(150)); setCursor(Qt::CrossCursor);
+    }
+    void setHue(float h)         { m_hue = h; update(); }
+    void setSV(float s, float v) { m_s = s; m_v = v; update(); }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        QPainterPath clip;
+        clip.addRoundedRect(rect(), Ui::px(Ui::kBoxRadius), Ui::px(Ui::kBoxRadius));
+        p.setClipPath(clip);
+        QColor hc; hc.setHsvF(qBound(0.0, (double)m_hue, 1.0), 1.0, 1.0);
+        QLinearGradient hg(0, 0, width(), 0);
+        hg.setColorAt(0, Qt::white); hg.setColorAt(1, hc);
+        p.fillRect(rect(), hg);
+        QLinearGradient vg(0, 0, 0, height());
+        vg.setColorAt(0, QColor(0,0,0,0)); vg.setColorAt(1, QColor(0,0,0,255));
+        p.fillRect(rect(), vg);
+        int cx = int(m_s * width());
+        int cy = int((1.0f - m_v) * height());
+        p.setPen(QPen(Qt::black, 2)); p.setBrush(Qt::NoBrush);
+        p.drawEllipse(QPointF(cx, cy), 7, 7);
+        p.setPen(QPen(Qt::white, 2));
+        p.drawEllipse(QPointF(cx, cy), 6, 6);
+    }
+    void mousePressEvent(QMouseEvent* e) override { if (e->button() == Qt::LeftButton) pick(e->pos()); }
+    void mouseMoveEvent(QMouseEvent* e)  override { if (e->buttons() & Qt::LeftButton)  pick(e->pos()); }
+private:
+    void pick(QPoint pos) {
+        m_s = qBound(0.f, float(pos.x()) / width(), 1.f);
+        m_v = qBound(0.f, 1.f - float(pos.y()) / height(), 1.f);
+        update(); if (onChanged) onChanged(m_s, m_v);
+    }
+    float m_hue = 0.f, m_s = 1.f, m_v = 1.f;
+};
+
+class HueBarWidget : public QWidget {
+public:
+    std::function<void(float h)> onChanged;
+    explicit HueBarWidget(QWidget* p = nullptr) : QWidget(p) { setFixedHeight(Ui::px(16)); setCursor(handleCursor(1, 0, 0.0, true)); }
+    void setHue(float h) { m_hue = h; update(); }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this); p.setRenderHint(QPainter::Antialiasing, true);
+        const int H = height();
+        QLinearGradient g(0, 0, width(), 0);
+        for (int i = 0; i <= 12; i++) { QColor c; c.setHsvF(i / 12.0, 1, 1); g.setColorAt(i / 12.0, c); }
+        p.setBrush(g); p.setPen(Qt::NoPen); p.drawRoundedRect(rect(), H / 2.0, H / 2.0);
+        const int r = H / 2;
+        int x = qBound(r, int(m_hue * width()), width() - r);
+        QColor hc; hc.setHsvF(qBound(0.0, (double)m_hue, 1.0), 1, 1);
+        QPointF c(x, H / 2.0);
+        p.setPen(QPen(QColor(0, 0, 0, 90), 1)); p.setBrush(hc);
+        p.drawEllipse(c, r - 1.0, r - 1.0);
+        p.setPen(QPen(Qt::white, 2)); p.setBrush(Qt::NoBrush);
+        p.drawEllipse(c, r - 2.0, r - 2.0);
+    }
+    void mousePressEvent(QMouseEvent* e) override { if (e->button() == Qt::LeftButton) pick(e->pos()); }
+    void mouseMoveEvent(QMouseEvent* e)  override { if (e->buttons() & Qt::LeftButton)  pick(e->pos()); }
+private:
+    void pick(QPoint pos) { m_hue = qBound(0.f, float(pos.x()) / width(), 1.f); update(); if (onChanged) onChanged(m_hue); }
+    float m_hue = 0.f;
+};
+
+class OpacityBarWidget : public QWidget {
+public:
+    std::function<void(float a)> onChanged;
+    explicit OpacityBarWidget(QWidget* p = nullptr) : QWidget(p) { setFixedHeight(Ui::px(16)); setCursor(handleCursor(1, 0, 0.0, true)); }
+    void setColor(QColor c) { m_color = c; update(); }
+    void setAlpha(float a)  { m_alpha = a; update(); }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this); p.setRenderHint(QPainter::Antialiasing, true);
+        const int H = height();
+        QPainterPath clip; clip.addRoundedRect(rect(), H / 2.0, H / 2.0);
+        p.setClipPath(clip);
+        int cs = 4;
+        for (int x = 0; x < width(); x += cs)
+            for (int y = 0; y < height(); y += cs)
+                p.fillRect(x, y, cs, cs, ((x/cs + y/cs) % 2) ? QColor(180,180,180) : QColor(80,80,80));
+        QColor op = m_color; op.setAlphaF(1.0f);
+        QLinearGradient g(0, 0, width(), 0);
+        g.setColorAt(0, QColor(op.red(), op.green(), op.blue(), 0));
+        g.setColorAt(1, op);
+        p.setBrush(g); p.setPen(Qt::NoPen); p.drawRoundedRect(rect(), H / 2.0, H / 2.0);
+        p.setClipping(false);
+        const int r = H / 2;
+        int x = qBound(r, int(m_alpha * width()), width() - r);
+        QColor knob = m_color; knob.setAlphaF(qBound(0.f, m_alpha, 1.f));
+        QPointF c(x, H / 2.0);
+        p.setPen(QPen(QColor(0, 0, 0, 90), 1)); p.setBrush(knob);
+        p.drawEllipse(c, r - 1.0, r - 1.0);
+        p.setPen(QPen(Qt::white, 2)); p.setBrush(Qt::NoBrush);
+        p.drawEllipse(c, r - 2.0, r - 2.0);
+    }
+    void mousePressEvent(QMouseEvent* e) override { if (e->button() == Qt::LeftButton) pick(e->pos()); }
+    void mouseMoveEvent(QMouseEvent* e)  override { if (e->buttons() & Qt::LeftButton)  pick(e->pos()); }
+private:
+    void pick(QPoint pos) { m_alpha = qBound(0.f, float(pos.x()) / width(), 1.f); update(); if (onChanged) onChanged(m_alpha); }
+    QColor m_color = Qt::red; float m_alpha = 1.f;
+};
+
+// ============================================================
+//  ScreenColorLoupe — full-desktop overlay with a magnifier card
+// ============================================================
+//
+// Captures every screen once, then grabs the mouse and follows the cursor with
+// a zoomed loupe (grid + centred target pixel). Click = pick that pixel's
+// colour; Esc / right-click = cancel. Sampling reads the captured surface, so it
+// returns whatever pixel is on top — independent of any layer.
+namespace {
+class ScreenColorLoupe : public QWidget
+{
+public:
+    std::function<void(bool, QColor)> onFinished;
+
+    ScreenColorLoupe()
+        : QWidget(nullptr, Qt::FramelessWindowHint | Qt::Tool
+                           | Qt::WindowStaysOnTopHint | Qt::X11BypassWindowManagerHint)
+    {
+        setAttribute(Qt::WA_TranslucentBackground);
+        setAttribute(Qt::WA_DeleteOnClose);
+        setMouseTracking(true);
+        setCursor(Qt::CrossCursor);
+        // Override the global `QWidget { background:#272727 }` rule, else the
+        // full-desktop overlay paints opaque grey over everything.
+        setStyleSheet("background: transparent;");
+
+        QRect vg;
+        for (QScreen* s : QGuiApplication::screens()) vg = vg.united(s->geometry());
+        setGeometry(vg);
+        m_origin = vg.topLeft();
+        captureScreens();
+    }
+
+    void startPick()
+    {
+        show();
+        raise();
+        activateWindow();
+        grabMouse();
+        grabKeyboard();
+        m_cursor = QCursor::pos();
+        update();
+    }
+
+protected:
+    void mouseMoveEvent(QMouseEvent* e) override   { m_cursor = e->globalPosition().toPoint(); update(); }
+    void mousePressEvent(QMouseEvent* e) override  { finish(e->button() == Qt::LeftButton); }
+    void keyPressEvent(QKeyEvent* e) override      { if (e->key() == Qt::Key_Escape) finish(false); }
+    void paintEvent(QPaintEvent*) override         { paintLoupe(); }
+
+private:
+    struct Cap { QImage img; QRect geo; qreal dpr; };
+
+    void captureScreens()
+    {
+        for (QScreen* s : QGuiApplication::screens()) {
+            QPixmap pm = s->grabWindow(0);
+            m_caps.push_back({ pm.toImage(), s->geometry(), pm.devicePixelRatio() });
+        }
+    }
+
+    QColor colorAt(const QPoint& g) const
+    {
+        for (const Cap& c : m_caps) {
+            if (!c.geo.contains(g)) continue;
+            const QPoint loc = g - c.geo.topLeft();
+            const int x = int(loc.x() * c.dpr);
+            const int y = int(loc.y() * c.dpr);
+            if (x >= 0 && y >= 0 && x < c.img.width() && y < c.img.height())
+                return c.img.pixelColor(x, y);
+        }
+        return QColor();
+    }
+
+    void finish(bool ok)
+    {
+        const QColor c = ok ? colorAt(m_cursor) : QColor();
+        releaseMouse();
+        releaseKeyboard();
+        hide();
+        if (onFinished) onFinished(ok && c.isValid(), c);
+        close();   // WA_DeleteOnClose
+    }
+
+    void paintLoupe()
+    {
+        const QPoint lc = m_cursor - m_origin;       // overlay-local cursor
+        const int    R    = 7;                        // half-grid → 15×15 px sample
+        const int    N    = 2 * R + 1;
+        const int    diam = Ui::px(150);
+        const qreal  cell = qreal(diam) / N;
+
+        const int off = 20;   // stuck to the cursor: 20px right, 20px down
+        int lx = lc.x() + off;
+        int ly = lc.y() + off;
+        if (lx + diam > width())  lx = lc.x() - off - diam;
+        if (ly + diam > height()) ly = lc.y() - off - diam;
+        const QRectF box(lx, ly, diam, diam);
+
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        const qreal rad = Ui::px(16);
+        QPainterPath clip; clip.addRoundedRect(box, rad, rad);
+        p.save();
+        p.setClipPath(clip);
+
+        for (int dy = -R; dy <= R; ++dy)
+            for (int dx = -R; dx <= R; ++dx) {
+                const QColor c = colorAt(m_cursor + QPoint(dx, dy));
+                const QRectF r(box.x() + (dx + R) * cell, box.y() + (dy + R) * cell,
+                               cell + 1.0, cell + 1.0);
+                p.fillRect(r, c.isValid() ? c : QColor(20, 20, 20));
+            }
+
+        p.setPen(QPen(QColor(0, 0, 0, 45), 1));
+        for (int i = 0; i <= N; ++i) {
+            const qreal gx = box.x() + i * cell, gy = box.y() + i * cell;
+            p.drawLine(QPointF(gx, box.top()), QPointF(gx, box.bottom()));
+            p.drawLine(QPointF(box.left(), gy), QPointF(box.right(), gy));
+        }
+
+        // Centred target pixel.
+        const QRectF centre(box.x() + R * cell, box.y() + R * cell, cell, cell);
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(Qt::black, Ui::px(3)));
+        p.drawRect(centre.adjusted(-1, -1, 1, 1));
+        p.setPen(QPen(Qt::white, Ui::px(2)));
+        p.drawRect(centre);
+        p.restore();
+
+        // Card border (light ring + thin dark outline), matching the design system.
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(0, 0, 0, 130), Ui::px(4)));
+        p.drawRoundedRect(box.adjusted(-1, -1, 1, 1), rad + 1, rad + 1);
+        p.setPen(QPen(Ui::kColPopupBorder, Ui::px(2)));
+        p.drawRoundedRect(box, rad, rad);
+    }
+
+    std::vector<Cap> m_caps;
+    QPoint           m_origin;
+    QPoint           m_cursor;
+};
+} // namespace
+
+// ============================================================
+//  ColorPickerDialog
+// ============================================================
+
+ColorPickerDialog::ColorPickerDialog(QColor initial, float initialOpacity,
+                                     bool showOpacity, QWidget* parent)
+    : QDialog(parent, Qt::FramelessWindowHint | Qt::Popup)
+    , m_a(initialOpacity)
+{
+    setAttribute(Qt::WA_TranslucentBackground);
+    setModal(false);
+    setFixedSize(Ui::px(340), Ui::px(showOpacity ? 350 : 300));
+
+    initial.getHsvF(&m_h, &m_s, &m_v);
+    if (m_h < 0) m_h = 0.f;
+
+    buildUI(showOpacity);
+    updateAllFromHSV();
+}
+
+QColor ColorPickerDialog::selectedColor() const
+{
+    QColor c; c.setHsvF(qBound(0.0, (double)m_h, 1.0),
+                        qBound(0.0, (double)m_s, 1.0),
+                        qBound(0.0, (double)m_v, 1.0));
+    return c;
+}
+
+void ColorPickerDialog::moveNextTo(QWidget* anchor)
+{
+    if (!anchor) return;
+    QPoint gp = anchor->mapToGlobal(QPoint(0, 0));
+    QRect sg  = anchor->screen()->availableGeometry();
+    int dlgX  = qMax(sg.left(), gp.x() - width() - 8);
+    int dlgY  = qBound(sg.top(), gp.y(), sg.bottom() - height());
+    move(dlgX, dlgY);
+}
+
+void ColorPickerDialog::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(Ui::kColPopupBorder, 1));
+    p.setBrush(Ui::kColBgWindow);
+    p.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 10, 10);
+}
+
+void ColorPickerDialog::mousePressEvent(QMouseEvent* e)
+{
+    QDialog::mousePressEvent(e);
+}
+
+void ColorPickerDialog::mouseMoveEvent(QMouseEvent* e)
+{
+    QDialog::mouseMoveEvent(e);
+}
+
+void ColorPickerDialog::mouseReleaseEvent(QMouseEvent* e)
+{
+    QDialog::mouseReleaseEvent(e);
+}
+
+void ColorPickerDialog::buildUI(bool showOpacity)
+{
+    const QString kInputQss = QString(
+        "QLineEdit{background:%1;border:1px solid %2;border-radius:6px;"
+        "color:%3;font-size:9pt;padding:0 8px;min-height:34px;}"
+        "QLineEdit:focus{border-color:#828282;}")
+        .arg(Ui::kColBgPanel.name(), Ui::kColPopupBorder.name(), Ui::kColTextBody.name());
+
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(Ui::px(16), Ui::px(16), Ui::px(16), Ui::px(16));
+    root->setSpacing(Ui::px(12));
+
+    // Saturation / value field
+    m_field = new ColorFieldWidget;
+    m_field->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    root->addWidget(m_field, 1);
+
+    // Eyedropper (left) + hue / opacity bars (right)
+    {
+        auto* row = new QHBoxLayout;
+        row->setSpacing(Ui::px(12));
+
+        auto* eyeBtn = new QPushButton;
+        eyeBtn->setObjectName("eyeDropBtn");
+        eyeBtn->setAutoDefault(false);   // else Enter in hex/opacity fields also fires this
+        eyeBtn->setCursor(appCursor());
+        eyeBtn->setFixedSize(Ui::px(30), Ui::px(30));
+        eyeBtn->setIconSize(QSize(Ui::px(18), Ui::px(18)));
+        eyeBtn->setIcon(QIcon(":/icons/color_picker.svg"));
+        eyeBtn->setToolTip("Pick color from screen");
+        eyeBtn->setStyleSheet(
+            "QPushButton#eyeDropBtn{background:transparent;border:none;border-radius:6px;}"
+            "QPushButton#eyeDropBtn:hover{background:#2E2E2E;}");
+        row->addWidget(eyeBtn, 0, Qt::AlignVCenter);
+
+        auto* bars = new QVBoxLayout;
+        bars->setSpacing(Ui::px(10));
+        m_hueBar = new HueBarWidget;
+        bars->addWidget(m_hueBar);
+        if (showOpacity) {
+            m_opBar = new OpacityBarWidget;
+            bars->addWidget(m_opBar);
+        }
+        row->addLayout(bars, 1);
+        root->addLayout(row);
+
+        connect(eyeBtn, &QPushButton::clicked, this, [this]() {
+            // This dialog is a Qt::Popup (with WA_DeleteOnClose): the loupe's
+            // mouse grab would dismiss it. Keep it alive and hide it during the
+            // pick so it isn't captured into the screenshot, then reshow it.
+            const bool autoDel = testAttribute(Qt::WA_DeleteOnClose);
+            setAttribute(Qt::WA_DeleteOnClose, false);
+            hide();
+            qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
+
+            QPointer<ColorPickerDialog> self(this);
+            auto* loupe = new ScreenColorLoupe;
+            loupe->onFinished = [self, autoDel](bool ok, QColor c) {
+                if (!self) return;
+                if (ok) {
+                    c.getHsvF(&self->m_h, &self->m_s, &self->m_v);
+                    if (self->m_h < 0) self->m_h = 0.f;
+                    self->updateAllFromHSV();
+                    if (self->onColorChanged) self->onColorChanged(self->selectedColor(), self->m_a);
+                }
+                self->setAttribute(Qt::WA_DeleteOnClose, autoDel);
+                self->show();
+                self->raise();
+                self->activateWindow();
+            };
+            loupe->startPick();
+        });
+    }
+
+    // Hex value + opacity %
+    {
+        auto* row = new QHBoxLayout;
+        row->setSpacing(Ui::px(8));
+
+        m_hexInput = new QLineEdit;
+        m_hexInput->setStyleSheet(kInputQss);
+        row->addWidget(m_hexInput, 1);
+
+        if (showOpacity) {
+            m_opacityInput = new QLineEdit;
+            m_opacityInput->setAlignment(Qt::AlignCenter);
+            m_opacityInput->setFixedWidth(Ui::px(64));
+            m_opacityInput->setStyleSheet(kInputQss);
+            row->addWidget(m_opacityInput);
+
+            auto* pct = new QLabel("%");
+            pct->setStyleSheet(QString("color:%1;font-size:9pt;background:transparent;").arg(Ui::kColTextLabel.name()));
+            row->addWidget(pct);
+        }
+        root->addLayout(row);
+    }
+
+    m_field->onChanged = [this](float s, float v) {
+        m_s = s; m_v = v;
+        if (m_opBar) m_opBar->setColor(selectedColor());
+        updatePreviewAndHex();
+        if (onColorChanged) onColorChanged(selectedColor(), m_a);
+    };
+    m_hueBar->onChanged = [this](float h) {
+        m_h = h;
+        m_field->setHue(h);
+        if (m_opBar) m_opBar->setColor(selectedColor());
+        updatePreviewAndHex();
+        if (onColorChanged) onColorChanged(selectedColor(), m_a);
+    };
+    if (m_opBar) {
+        m_opBar->onChanged = [this](float a) {
+            m_a = a; updatePreviewAndHex();
+            if (onColorChanged) onColorChanged(selectedColor(), m_a);
+        };
+    }
+    connect(m_hexInput, &QLineEdit::editingFinished, m_hexInput, [this]() {
+        QString txt = m_hexInput->text().trimmed().remove('#');
+        if (txt.length() == 6) {
+            bool ok; QRgb rgb = txt.toUInt(&ok, 16);
+            if (ok) {
+                QColor c(rgb); c.getHsvF(&m_h, &m_s, &m_v);
+                if (m_h < 0) m_h = 0.f;
+                updateAllFromHSV();
+                if (onColorChanged) onColorChanged(selectedColor(), m_a);
+            }
+        }
+    });
+    if (m_opacityInput) {
+        connect(m_opacityInput, &QLineEdit::editingFinished, m_opacityInput, [this]() {
+            bool ok; int v = m_opacityInput->text().remove('%').trimmed().toInt(&ok);
+            if (ok) {
+                m_a = qBound(0.f, v / 100.0f, 1.f);
+                updateAllFromHSV();
+                if (onColorChanged) onColorChanged(selectedColor(), m_a);
+            } else {
+                m_opacityInput->setText(QString::number(qRound(m_a * 100.0f)));
+            }
+        });
+    }
+}
+
+void ColorPickerDialog::updateAllFromHSV()
+{
+    m_field->setHue(m_h); m_field->setSV(m_s, m_v);
+    m_hueBar->setHue(m_h);
+    if (m_opBar) { m_opBar->setAlpha(m_a); m_opBar->setColor(selectedColor()); }
+    updatePreviewAndHex();
+}
+
+void ColorPickerDialog::updatePreviewAndHex()
+{
+    QColor c = selectedColor();
+    if (m_hexInput && !m_hexInput->hasFocus())
+        m_hexInput->setText(c.name().mid(1).toUpper());
+    if (m_opacityInput && !m_opacityInput->hasFocus())
+        m_opacityInput->setText(QString::number(qRound(m_a * 100.0f)));
+}
+
+// ============================================================
+//  ElidedLabel
+// ============================================================
+
+ElidedLabel::ElidedLabel(QWidget* parent) : QLabel(parent)
+{
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    setMinimumWidth(0);
+}
+
+void ElidedLabel::setFullText(const QString& t)
+{
+    m_full = t;
+    updateElide();
+}
+
+void ElidedLabel::resizeEvent(QResizeEvent* e)
+{
+    QLabel::resizeEvent(e);
+    updateElide();
+}
+
+void ElidedLabel::updateElide()
+{
+    QLabel::setText(QFontMetrics(font()).elidedText(m_full, Qt::ElideRight, width()));
+}
+
+// ============================================================
+//  Small helpers
+// ============================================================
+
+QLabel* makeParamLabel(const QString& text)
+{
+    auto* l = new QLabel(text);
+    l->setObjectName("paramLabel");
+    return l;
+}
+
+QLabel* makeSectionTitle(const QString& text)
+{
+    auto* l = new QLabel(text);
+    l->setObjectName("sectionTitle");
+    return l;
+}
+
+QFrame* makeSeparatorLine()
+{
+    auto* f = new QFrame;
+    f->setObjectName("separator");
+    f->setFrameShape(QFrame::NoFrame);
+    f->setFixedHeight(1);
+    return f;
+}
+
+QWidget* makeLabeledGroup(const QString& label, QWidget* control)
+{
+    auto* w = new QWidget;
+    auto* v = new QVBoxLayout(w);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(Ui::px(Ui::kGapLabelToCtrl));
+    v->addWidget(makeParamLabel(label));
+    v->addWidget(control);
+    return w;
+}
+
+QWidget* makeLabeledGroup(const QString& label, QLayout* control)
+{
+    auto* w = new QWidget;
+    auto* v = new QVBoxLayout(w);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(Ui::px(Ui::kGapLabelToCtrl));
+    v->addWidget(makeParamLabel(label));
+    v->addLayout(control);
+    return w;
+}
+
+QPushButton* makeIconButton(const QString& iconRes)
+{
+    auto* btn = new QPushButton;
+    btn->setObjectName("iconBtn");
+    btn->setIcon(QIcon(iconRes));
+    // Icon size derived from the button size (not scaled independently):
+    // Ui::px() rounds each argument on its own, so a separately-scaled
+    // 24/14 pair can land on an odd button-minus-icon difference, which
+    // makes Qt's integer icon-centering math split the leftover pixel
+    // unevenly (icon reads off-centre, more margin on one side). Deriving
+    // the icon size from the already-rounded button size keeps the gap
+    // exactly 2×pad — always even, so the icon lands dead centre.
+    const int btnPx = Ui::px(24);
+    const int pad   = Ui::px(5);
+    btn->setIconSize(QSize(btnPx - 2 * pad, btnPx - 2 * pad));
+    btn->setFixedSize(btnPx, btnPx);
+    return btn;
+}
+
+// ── Cursors ──────────────────────────────────────────────────
+
+namespace {
+
+constexpr int kArrowPx  = 14;   // plain pointer
+constexpr int kHandlePx = 21;   // the directional glyphs read smaller — ~1.3×
+
+QCursor makeSvgCursor(const char* path, int px, double rotateDeg, bool hotspotTip = false)
+{
+    QPixmap pm = QIcon(QString::fromLatin1(path)).pixmap(px, px);
+    if (rotateDeg != 0.0)
+        pm = pm.transformed(QTransform().rotate(rotateDeg), Qt::SmoothTransformation);
+    // QCursor wants the hotspot in DEVICE-INDEPENDENT pixels, but pm.width()
+    // is device pixels: passing width()/2 lands a 200%-DPI hotspot on the
+    // glyph's bottom-right corner instead of its centre. Qt's own default
+    // (-1,-1) does the divide, so let it centre the glyph.
+    return hotspotTip ? QCursor(pm, 1, 1) : QCursor(pm);
+}
+
+// One cache for every angled glyph. `kind` keeps the three families apart.
+const QCursor& angledCursor(const char* path, int kind, double angleDeg)
+{
+    const int step = ((int(std::lround(angleDeg / 15.0)) % 24) + 24) % 24;
+    static QHash<int, QCursor> cache;
+    const int key = step * 4 + kind;
+    auto it = cache.find(key);
+    if (it == cache.end())
+        it = cache.insert(key, makeSvgCursor(path, kHandlePx, step * 15.0));
+    return *it;
+}
+
+} // namespace
+
+const QCursor& appCursor()
+{
+    static const QCursor c = makeSvgCursor(":/icons/cur_arrow.svg", kArrowPx, 0.0, true);
+    return c;
+}
+
+const QCursor& rotateCursor(int dx, int dy, double rotationDeg)
+{
+    // The glyph curves into the top-left corner, so each corner gets its own
+    // quarter turn; the layer's own rotation rides on top.
+    const double corner = (dy < 0) ? (dx < 0 ?   0.0 :  90.0)
+                                   : (dx > 0 ? 180.0 : 270.0);
+    return angledCursor(":/icons/cur_rotate.svg", 2, corner + rotationDeg);
+}
+
+const QCursor& handleCursor(int dx, int dy, double rotationDeg, bool stretch)
+{
+    // Base glyphs point NW-SE (scale) and N-S (stretch) — both double-headed,
+    // so opposite handles share a cursor and the angle wraps at 180°.
+    double a = qRadiansToDegrees(std::atan2(double(dy), double(dx))) + rotationDeg;
+    a = std::fmod(a, 180.0);
+    if (a < 0.0) a += 180.0;
+    return stretch ? angledCursor(":/icons/cur_stretch.svg", 1, a - 90.0)
+                   : angledCursor(":/icons/cur_scale.svg",   0, a - 45.0);
+}
+
+const QCursor& resizeCursor(bool vertical)
+{
+    static const QCursor h = makeSvgCursor(":/icons/cur_window.svg", kHandlePx, 0.0);
+    static const QCursor v = makeSvgCursor(":/icons/cur_window.svg", kHandlePx, 90.0);
+    return vertical ? v : h;
+}
+
+void applySplitterCursors(QSplitter* sp)
+{
+    const bool vertical = sp->orientation() == Qt::Vertical;
+    for (int i = 1; i < sp->count(); ++i)
+        if (QWidget* h = sp->handle(i)) h->setCursor(resizeCursor(vertical));
+}
+
+// ── Dialog card artwork ──────────────────────────────────────
+// The dialog backgrounds are the design's own SVGs (dialog_card.svg for the
+// progress popup, dialog_card_warning.svg — lime edge + warning mark — for
+// confirmations), drawn straight into the widget rect. The dialogs keep the
+// artwork's aspect ratio (kDialogAspect) so the bubbles along the edge don't
+// get stretched.
+
+namespace {
+
+void paintDialogCard(QPaintDevice* dev, const QRect& rect, bool withWarning)
+{
+    QPainter p(dev);
+    p.setRenderHint(QPainter::Antialiasing);
+    QSvgRenderer svg(QString(withWarning ? ":/icons/dialog_card_warning.svg"
+                                         : ":/icons/dialog_card.svg"));
+    svg.render(&p, QRectF(rect));
+}
+
+// Dialogs sit in the middle of the screen the app is on, not the middle of
+// the app window: a card centred inside a small window reads as oversized.
+void centerOnScreen(QDialog* d, QWidget* parent)
+{
+    const QScreen* scr = parent && parent->window()->screen()
+                       ? parent->window()->screen() : QGuiApplication::primaryScreen();
+    if (!scr) return;
+    const QRect area = scr->availableGeometry();
+    d->move(area.center() - QPoint(d->width() / 2, d->height() / 2));
+}
+
+// The card is one drawing, not a nine-patch: any size that isn't the
+// artwork's aspect ratio stretches the bubbles along the edge. So the dialog
+// takes the height its content needs and then widens to match.
+void lockCardAspect(QDialog* d, int widthFigma, double aspect)
+{
+    d->setFixedWidth(Ui::px(widthFigma));
+    const int w = qMax(Ui::px(widthFigma),
+                       int(qRound(d->sizeHint().height() * aspect)));
+    d->setFixedSize(w, int(qRound(w / aspect)));
+}
+
+} // namespace
+
+// ── AnimProgressDialog ───────────────────────────────────────
+
+namespace {
+// QSS ::chunk leaves the filled end square (Qt clips the chunk rect), so the
+// bar paints itself: pill groove + pill chunk, both fully rounded.
+// ponytail: indeterminate (range 0,0) just fills solid — no marching stripe.
+class PillProgressBar : public QProgressBar {
+public:
+    using QProgressBar::QProgressBar;
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        const qreal rad = r.height() / 2.0;
+        p.setPen(QPen(Ui::kColBoxStroke, 1));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r, rad, rad);
+
+        const int span = maximum() - minimum();
+        const qreal frac = span > 0 ? qreal(value() - minimum()) / span : 1.0;
+        if (frac <= 0.0) return;
+        QRectF fill = r;
+        fill.setWidth(qMax(r.height(), r.width() * qBound(0.0, frac, 1.0)));
+        p.setPen(Qt::NoPen);
+        p.setBrush(Ui::kColLocLime);
+        p.drawRoundedRect(fill, rad, rad);
+    }
+};
+} // namespace
+
+AnimProgressDialog::AnimProgressDialog(const QString& labelText, int maxValue, QWidget* parent)
+    : QDialog(parent, Qt::FramelessWindowHint | Qt::Dialog)
+{
+    setAttribute(Qt::WA_TranslucentBackground);
+    setModal(true);
+    setWindowModality(Qt::WindowModal);
+    m_elapsed.start();
+
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(Ui::px(52), Ui::px(40), Ui::px(52), Ui::px(32));
+    root->setSpacing(0);
+
+    m_label = new QLabel(labelText);
+    m_label->setObjectName("progressLabel");
+    root->addWidget(m_label);
+    root->addStretch(1);
+
+    m_bar = new PillProgressBar;
+    m_bar->setObjectName("animProgressBar");
+    m_bar->setRange(0, maxValue);
+    m_bar->setTextVisible(false);
+    m_bar->setFixedHeight(Ui::px(37));
+    root->addWidget(m_bar);
+    root->addStretch(1);
+
+    auto* btnRow = new QHBoxLayout;
+    btnRow->setContentsMargins(0, 0, 0, 0);
+    btnRow->addStretch(1);
+    auto* cancelBtn = new QPushButton("Cancel");
+    cancelBtn->setObjectName("dialogNoBtn");
+    cancelBtn->setCursor(appCursor());
+    cancelBtn->setFixedSize(Ui::px(138), Ui::px(46));
+    connect(cancelBtn, &QPushButton::clicked, this, [this] { m_canceled = true; });
+    btnRow->addWidget(cancelBtn);
+    root->addLayout(btnRow);
+
+    setFixedSize(Ui::px(Ui::kDialogWFigma),
+                 int(Ui::px(Ui::kDialogWFigma) / Ui::kDialogAspect));
+    centerOnScreen(this, parent);
+}
+
+void AnimProgressDialog::setValue(int v)
+{
+    m_bar->setValue(v);
+    if (!isVisible()) {
+        if (m_elapsed.elapsed() < m_minDurationMs) return;
+        show();
+        raise();
+    }
+
+}
+
+void AnimProgressDialog::setLabelText(const QString& text)
+{
+    m_label->setText(text);
+}
+
+void AnimProgressDialog::setRange(int lo, int hi)
+{
+    m_bar->setRange(lo, hi);
+}
+
+void AnimProgressDialog::paintEvent(QPaintEvent*)
+{
+    paintDialogCard(this, rect(), /*withWarning=*/false);
+}
+
+// ── UnsavedChangesDialog ───────────────────────────────────────
+
+UnsavedChangesDialog::UnsavedChangesDialog(const QString& documentName, QWidget* parent)
+    : QDialog(parent, Qt::FramelessWindowHint | Qt::Dialog)
+{
+    setAttribute(Qt::WA_TranslucentBackground);
+    setModal(true);
+    setWindowModality(Qt::WindowModal);
+    // Plain QWidgets pick up the global "QWidget { background-color: @bgPanel }"
+    // rule and would paint a flat block over the card artwork, hence
+    // objectName "dialogPane" (transparent) on every container.
+    auto* root = new QVBoxLayout(this);
+    const int pad = Ui::px(Ui::kDialogWarnPad);
+    // Top margin is NOT 50+pad like the others: the close button has to end up
+    // concentric with the card's top-right corner arc. In the 1314×630 artwork
+    // that arc is centred at (1162.15, 151.447), and 643 Figma px map to 1314
+    // svg units, so the centre sits ~74 Figma px in from both the top and the
+    // right edge. Minus half the 45px button → 52.
+    root->setContentsMargins(Ui::px(52) + pad, Ui::px(52),
+                             Ui::px(52) + pad, Ui::px(44) + pad);
+    root->setSpacing(0);
+
+    auto* topRowWidget = new QWidget;
+    topRowWidget->setObjectName("dialogPane");
+    auto* topRow = new QHBoxLayout(topRowWidget);
+    // Horizontally the close button follows the root margin like every other
+    // row, so its right edge lines up with the "No" button below it.
+    topRow->setContentsMargins(0, 0, 0, 0);
+    topRow->setSpacing(Ui::px(14));
+    auto* msg = new QLabel(QString("Save changes to “%1”? ").arg(documentName.toHtmlEscaped()));
+    msg->setObjectName("dialogMessage");
+    msg->setWordWrap(true);
+    topRow->addWidget(msg, 1);
+    // Dismiss = Cancel (same as Esc): keeps the document open, saves nothing.
+    auto* closeBtn = new QPushButton("x");
+    closeBtn->setObjectName("dialogCloseBtn");
+    closeBtn->setCursor(appCursor());
+    const int closeD = Ui::px(45);
+    closeBtn->setFixedSize(closeD, closeD);
+    // Radius must be exactly half the (already rounded) pixel size — a QSS
+    // s(...) value rounds separately and leaves the corners visibly square.
+    closeBtn->setStyleSheet(QString("border-radius: %1px;").arg(closeD / 2));
+    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+    topRow->addWidget(closeBtn, 0, Qt::AlignTop);
+    root->addWidget(topRowWidget);
+    root->addStretch(1);
+
+    auto* btnRowWidget = new QWidget;
+    btnRowWidget->setObjectName("dialogPane");
+    auto* btnRow = new QHBoxLayout(btnRowWidget);
+    btnRow->setContentsMargins(0, 0, 0, 0);
+    btnRow->setSpacing(Ui::px(14));
+    btnRow->addStretch(1);
+    auto* yesBtn = new QPushButton("Save");
+    yesBtn->setObjectName("dialogYesBtn");
+    yesBtn->setCursor(appCursor());
+    yesBtn->setFixedSize(Ui::px(94), Ui::px(48));
+    yesBtn->setDefault(true);
+    connect(yesBtn, &QPushButton::clicked, this, [this] { m_choice = Save; accept(); });
+    auto* noBtn = new QPushButton("Discard");
+    noBtn->setObjectName("dialogNoBtn");
+    noBtn->setCursor(appCursor());
+    noBtn->setFixedSize(Ui::px(120), Ui::px(48));
+    connect(noBtn, &QPushButton::clicked, this, [this] { m_choice = Discard; accept(); });
+    btnRow->addWidget(yesBtn);
+    btnRow->addWidget(noBtn);
+    root->addWidget(btnRowWidget);
+
+    lockCardAspect(this, Ui::kDialogWarnWFigma, Ui::kDialogWarnAspect);
+    centerOnScreen(this, parent);
+}
+
+void UnsavedChangesDialog::paintEvent(QPaintEvent*)
+{
+    paintDialogCard(this, rect(), /*withWarning=*/true);
+}
+
+// ── StyledMessageBox ─────────────────────────────────────────
+
+StyledMessageBox::StyledMessageBox(const QString& message, QWidget* parent,
+                                    const QString& yesText, const QString& noText,
+                                    bool defaultYes, bool dangerYes)
+    : QDialog(parent, Qt::FramelessWindowHint | Qt::Dialog)
+{
+    setAttribute(Qt::WA_TranslucentBackground);
+    setModal(true);
+    setWindowModality(Qt::WindowModal);
+    auto* root = new QVBoxLayout(this);
+    const int pad = Ui::px(Ui::kDialogWarnPad);
+    root->setContentsMargins(Ui::px(52) + pad, Ui::px(50) + pad,
+                             Ui::px(52) + pad, Ui::px(44) + pad);
+    root->setSpacing(0);
+
+    auto* msg = new QLabel(message);
+    msg->setObjectName("dialogMessage");
+    msg->setWordWrap(true);
+    root->addWidget(msg);
+    root->addStretch(1);
+
+    auto* btnRowWidget = new QWidget;
+    btnRowWidget->setObjectName("dialogPane");
+    auto* btnRow = new QHBoxLayout(btnRowWidget);
+    btnRow->setContentsMargins(0, 0, 0, 0);
+    btnRow->setSpacing(Ui::px(14));
+    btnRow->addStretch(1);
+
+    auto* yesBtn = new QPushButton(yesText);
+    yesBtn->setObjectName("dialogYesBtn");
+    yesBtn->setProperty("danger", dangerYes);
+    yesBtn->setCursor(appCursor());
+    yesBtn->setFixedSize(Ui::px(94), Ui::px(48));
+    yesBtn->setDefault(defaultYes);
+    connect(yesBtn, &QPushButton::clicked, this, [this] { m_accepted = true; accept(); });
+    btnRow->addWidget(yesBtn);
+    if (!noText.isEmpty()) {
+        auto* noBtn = new QPushButton(noText);
+        noBtn->setObjectName("dialogNoBtn");
+        noBtn->setCursor(appCursor());
+        noBtn->setFixedSize(Ui::px(94), Ui::px(48));
+        noBtn->setDefault(!defaultYes);
+        connect(noBtn, &QPushButton::clicked, this, [this] { m_accepted = false; accept(); });
+        btnRow->addWidget(noBtn);
+    }
+    root->addWidget(btnRowWidget);
+
+    lockCardAspect(this, Ui::kDialogWarnWFigma, Ui::kDialogWarnAspect);
+    centerOnScreen(this, parent);
+}
+
+void StyledMessageBox::paintEvent(QPaintEvent*)
+{
+    paintDialogCard(this, rect(), /*withWarning=*/true);
+}
+
+bool askYesNo(QWidget* parent, const QString& message, bool defaultYes, bool dangerYes)
+{
+    StyledMessageBox dlg(message, parent, "Yes", "No", defaultYes, dangerYes);
+    dlg.exec();
+    return dlg.accepted();
+}
+
+void showMessage(QWidget* parent, const QString& message)
+{
+    StyledMessageBox dlg(message, parent, "OK", QString(), true);
+    dlg.exec();
+}
+
+// ── Auto-hide scrollbar ──────────────────────────────────────
+namespace {
+class AutoHideFilter : public QObject {
+public:
+    AutoHideFilter(QScrollBar* sb, QGraphicsOpacityEffect* eff, QObject* parent)
+        : QObject(parent), m_sb(sb), m_eff(eff)
+    {
+        m_anim = new QPropertyAnimation(eff, "opacity", this);
+        m_anim->setDuration(160);
+        m_timer = new QTimer(this);
+        m_timer->setSingleShot(true);
+        m_timer->setInterval(900);
+        connect(m_timer, &QTimer::timeout, this, [this]{ fade(0.0); });
+    }
+    // Reveal only while scrolling and only when something is actually hidden.
+    void reveal()
+    {
+        if (m_sb->maximum() <= m_sb->minimum()) return;
+        fade(1.0);
+        m_timer->start();
+    }
+protected:
+    bool eventFilter(QObject* o, QEvent* e) override
+    {
+        if (e->type() == QEvent::Wheel) reveal();
+        else if (o == m_sb && (e->type() == QEvent::Enter || e->type() == QEvent::HoverEnter))
+            reveal();
+        return QObject::eventFilter(o, e);
+    }
+private:
+    void fade(double to)
+    {
+        m_anim->stop();
+        m_anim->setStartValue(m_eff->opacity());
+        m_anim->setEndValue(to);
+        m_anim->start();
+    }
+    QScrollBar*             m_sb;
+    QGraphicsOpacityEffect* m_eff;
+    QPropertyAnimation*     m_anim;
+    QTimer*                 m_timer;
+};
+} // namespace
+
+void installAutoHideScrollbar(QAbstractScrollArea* area)
+{
+    QScrollBar* sb = area->verticalScrollBar();
+    auto* eff = new QGraphicsOpacityEffect(sb);
+    eff->setOpacity(0.0);
+    sb->setGraphicsEffect(eff);
+
+    auto* f = new AutoHideFilter(sb, eff, area);
+    sb->installEventFilter(f);
+    area->viewport()->installEventFilter(f);
+    QObject::connect(sb, &QScrollBar::valueChanged, f, [f](int) { f->reveal(); });
+}
+
+// ── Overlay scrollbar ────────────────────────────────────────
+namespace {
+class OverlayScrollCtl : public QObject {
+public:
+    OverlayScrollCtl(QAbstractScrollArea* area, QScrollBar* over, QGraphicsOpacityEffect* eff)
+        : QObject(area), m_area(area), m_over(over), m_eff(eff)
+    {
+        m_real = area->verticalScrollBar();
+        m_anim = new QPropertyAnimation(eff, "opacity", this);
+        m_anim->setDuration(160);
+        m_timer = new QTimer(this);
+        m_timer->setSingleShot(true);
+        m_timer->setInterval(900);
+        connect(m_timer, &QTimer::timeout, this, [this] { fade(0.0); });
+
+        connect(m_real, &QScrollBar::rangeChanged, this, [this](int lo, int hi) { syncRange(lo, hi); });
+        connect(m_real, &QScrollBar::valueChanged, this, [this](int v) {
+            if (m_over->value() != v) m_over->setValue(v);
+            reveal();
+        });
+        connect(m_over, &QScrollBar::valueChanged, this, [this](int v) {
+            if (m_real->value() != v) m_real->setValue(v);
+        });
+        syncRange(m_real->minimum(), m_real->maximum());
+
+        area->installEventFilter(this);
+        if (area->viewport()) area->viewport()->installEventFilter(this);
+        reposition();
+    }
+    void reveal()
+    {
+        if (m_real->maximum() <= m_real->minimum()) return;
+        fade(1.0);
+        m_timer->start();
+    }
+protected:
+    bool eventFilter(QObject*, QEvent* e) override
+    {
+        if (e->type() == QEvent::Resize) reposition();
+        else if (e->type() == QEvent::Wheel) reveal();
+        return false;
+    }
+private:
+    void syncRange(int lo, int hi)
+    {
+        m_over->setRange(lo, hi);
+        m_over->setPageStep(m_real->pageStep());
+        m_over->setSingleStep(m_real->singleStep());
+        m_over->setVisible(hi > lo);
+    }
+    void reposition()
+    {
+        QWidget* vp = m_area->viewport();
+        if (!vp) return;
+        const QRect r = vp->geometry();
+        const int w = m_over->width();
+        m_over->setGeometry(r.right() - w + 1, r.top(), w, r.height());
+        m_over->raise();
+    }
+    void fade(double to)
+    {
+        m_anim->stop();
+        m_anim->setStartValue(m_eff->opacity());
+        m_anim->setEndValue(to);
+        m_anim->start();
+    }
+    QAbstractScrollArea*    m_area;
+    QScrollBar*             m_over;
+    QScrollBar*             m_real;
+    QGraphicsOpacityEffect* m_eff;
+    QPropertyAnimation*     m_anim;
+    QTimer*                 m_timer;
+};
+} // namespace
+
+void installOverlayScrollbar(QAbstractScrollArea* area)
+{
+    // The real scrollbar reserves no width; a floating one is drawn over the
+    // content so dividers/boxes can reach the panel's right edge.
+    area->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* over = new QScrollBar(Qt::Vertical, area);
+    over->setFixedWidth(Ui::px(10));
+    auto* eff = new QGraphicsOpacityEffect(over);
+    eff->setOpacity(0.0);
+    over->setGraphicsEffect(eff);
+    new OverlayScrollCtl(area, over, eff);
+}
+
+// ============================================================
+//  PopupPicker
+// ============================================================
+
+namespace {
+// When any popup last closed — see popupJustClosed() in Widgets.h.
+QElapsedTimer g_popupClosed;
+
+// Reports when the popup closes, so the toggle button can tell "outside
+// click closed me" apart from "user wants me open again".
+class PopupPickerFrame : public QFrame {
+public:
+    std::function<void()> onHide;
+    using QFrame::QFrame;
+protected:
+    void hideEvent(QHideEvent* e) override
+    {
+        QFrame::hideEvent(e);
+        g_popupClosed.start();
+        if (onHide) onHide();
+    }
+};
+} // namespace
+
+bool popupJustClosed(int withinMs)
+{
+    return g_popupClosed.isValid() && g_popupClosed.elapsed() < withinMs;
+}
+
+PopupPicker::PopupPicker(int columns, QWidget* parent)
+    : QPushButton(parent), m_columns(columns)
+{
+    setObjectName("algoBox");
+    setCursor(appCursor());
+    setFixedHeight(Ui::px(Ui::kBoxH));
+
+    auto* hl = new QHBoxLayout(this);
+    hl->setContentsMargins(Ui::px(12), 0, Ui::px(14), 0);
+    hl->setSpacing(Ui::px(6));
+    // The value text is its own label (not the QPushButton's native text):
+    // native text painting ignores the arrow's layout slot and a long value
+    // (e.g. a font family name) draws straight under/over it. The label
+    // elides with "…" instead, same behaviour as a QComboBox's own text.
+    m_label = new QLabel;
+    m_label->setObjectName("algoBoxLabel");   // own QSS rule: font-size doesn't reliably
+                                               // cascade from #algoBox down to a child QLabel
+    m_label->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    hl->addWidget(m_label, 1);
+    m_arrow = new QLabel;
+    m_arrow->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_arrow->setStyleSheet("background:transparent; border:none;");
+    hl->addWidget(m_arrow);
+    setArrowOpen(false);
+
+    connect(this, &QPushButton::clicked, this, [this]() {
+        // Qt closes the popup (outside-click grab) *before* this button's
+        // own clicked fires for the same press — without this guard the
+        // click that closes it immediately reopens it.
+        if (m_lastCloseTimer.isValid() && m_lastCloseTimer.elapsed() < 250)
+            return;
+        openPopup();
+    });
+}
+
+void PopupPicker::setEntries(const QVector<PopupPickerEntry>& entries)
+{
+    m_entries = entries;
+}
+
+void PopupPicker::setValue(const QVariant& v)
+{
+    m_value = v;
+    for (const auto& e : m_entries)
+        if (!e.label.isEmpty() && e.value == v) { m_fullText = e.label; updateElide(); break; }
+}
+
+void PopupPicker::setPlaceholder(const QString& text)
+{
+    m_value = QVariant();
+    m_fullText = text;
+    updateElide();
+}
+
+void PopupPicker::setAccent(bool on)
+{
+    m_accent = on;
+    setObjectName(on ? "algoBoxAccent" : "algoBox");
+    m_label->setObjectName(on ? "algoBoxLabelAccent" : "algoBoxLabel");
+    style()->unpolish(this);
+    style()->polish(this);
+    style()->unpolish(m_label);
+    style()->polish(m_label);
+    setArrowOpen(m_arrow->property("open").toBool());
+}
+
+void PopupPicker::setArrowOpen(bool open)
+{
+    m_arrow->setProperty("open", open);
+    const QString res = m_accent
+        ? (open ? ":/icons/arrow_up_mode.svg" : ":/icons/arrow_mode.svg")
+        : (open ? ":/icons/arrow_up.svg"      : ":/icons/arrow.svg");
+    m_arrow->setPixmap(QIcon(res).pixmap(Ui::px(14), Ui::px(8)));
+}
+
+void PopupPicker::updateElide()
+{
+    m_label->setText(QFontMetrics(m_label->font()).elidedText(m_fullText, Qt::ElideRight, m_label->width()));
+}
+
+void PopupPicker::resizeEvent(QResizeEvent* e)
+{
+    QPushButton::resizeEvent(e);
+    updateElide();
+}
+
+void PopupPicker::openPopup()
+{
+    auto* pop = new PopupPickerFrame(this, Qt::Popup);
+    pop->setObjectName("algoPopup");
+    pop->setAttribute(Qt::WA_DeleteOnClose);
+    pop->onHide = [this]() { m_lastCloseTimer.start(); };
+
+    auto* outer = new QVBoxLayout(pop);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+
+    auto* scroll = new QScrollArea;
+    scroll->setObjectName("algoPopupScroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    outer->addWidget(scroll);
+
+    auto* body = new QWidget;
+    body->setObjectName("algoPopupBody");
+    auto* gl = new QGridLayout(body);
+    gl->setContentsMargins(Ui::px(12), Ui::px(12), Ui::px(12), Ui::px(12));
+    gl->setHorizontalSpacing(Ui::px(10));
+    gl->setVerticalSpacing(Ui::px(10));
+    scroll->setWidget(body);
+
+    QVector<QWidget*> measureWidgets;   // cells + headers, for true sizeHint() width
+
+    int row = 0, col = 0;
+    for (const auto& e : m_entries) {
+        if (e.label.isEmpty() && e.lineHeader) {        // plain divider (Fusion's categories)
+            if (col) { ++row; col = 0; }
+            if (row > 0) {   // nothing to divide from above the very first entry
+                auto* line = new QFrame;
+                line->setFixedHeight(1);
+                line->setStyleSheet(QString("background:%1;border:none;").arg(Ui::kColPopupBorder.name()));
+                gl->addWidget(line, row++, 0, 1, m_columns);
+                measureWidgets.push_back(line);
+            }
+        } else if (e.label.isEmpty()) {                 // group header pill
+            if (col) { ++row; col = 0; }
+            auto* h = new QLabel(e.header);
+            h->setObjectName("algoHeader");
+            h->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            gl->addWidget(h, row++, 0, 1, m_columns);
+            measureWidgets.push_back(h);
+        } else {
+            auto* b = new QPushButton(e.label);
+            b->setObjectName("algoCell");
+            b->setCursor(appCursor());
+            b->setCheckable(true);
+            b->setChecked(e.value == m_value);
+            if (!e.tooltip.isEmpty()) b->setToolTip(e.tooltip);
+            b->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+            const QVariant val = e.value;
+            connect(b, &QPushButton::clicked, this, [this, val, pop]() {
+                pop->close();
+                if (val == m_value) return;
+                setValue(val);
+                if (onSelected) onSelected(val);
+            });
+            // AlignLeft keeps the button hugging its own text (a tight pill)
+            // instead of stretching its border to the shared column width.
+            gl->addWidget(b, row, col, Qt::AlignLeft | Qt::AlignVCenter);
+            measureWidgets.push_back(b);
+            if (++col == m_columns) { col = 0; ++row; }
+        }
+    }
+
+    pop->layout()->activate();
+
+    QScreen* scr = screen() ? screen() : QGuiApplication::primaryScreen();
+    const QRect avail = scr->availableGeometry();
+
+    // Short lists size the popup down to fit; long lists cap at a fixed
+    // height (roughly the old two-column Algorithm popup's height) and
+    // scroll for the rest.
+    constexpr int kMaxPopupContentHeight = 700;
+    const int contentH = body->sizeHint().height() + Ui::px(4);
+    const int maxH = qMin(Ui::px(kMaxPopupContentHeight), avail.height() - Ui::px(24));
+    const bool willScroll = contentH > maxH;
+    scroll->setFixedHeight(qMin(contentH, maxH));
+
+    // Width: sizeHint() lies here — the native style pads checkable buttons
+    // far beyond the QSS cell look. Measure each cell's text with its real
+    // post-QSS font (ensurePolished applies the stylesheet font), add the
+    // known QSS horizontal padding (s(15) each side, see #algoCell/#algoHeader),
+    // and pin the widget to exactly that, so every pill hugs its own text.
+    // When the list will scroll, the vertical scrollbar (10px, see QSS) is
+    // reserved on top of the widest pill — otherwise QScrollArea shrinks the
+    // viewport by the scrollbar's width, squeezing text against it.
+    const int cellPaddingX = Ui::px(15) * 2 + 2 /*cell border*/;
+    int maxCellW = 0;
+    for (QWidget* w : measureWidgets) {
+        w->ensurePolished();
+        const QString text = w->property("text").toString();
+        maxCellW = qMax(maxCellW, w->fontMetrics().horizontalAdvance(text) + cellPaddingX);
+    }
+    for (QWidget* w : measureWidgets)   // uniform boxes, text left-aligned via QSS
+        w->setFixedWidth(maxCellW);
+    const int gridMarginsX = Ui::px(12) * 2;   // grid body left+right margins
+    int contentW = maxCellW + gridMarginsX + 2 /*border*/;
+    if (willScroll) contentW += Ui::px(10);
+    scroll->setFixedWidth(qMax(contentW, Ui::px(100)));
+    // NOT adjustSize(): for top-level widgets whose layout expands
+    // horizontally, Qt clamps adjustSize() to a 200px minimum width
+    // (QWidgetPrivate::adjustedSize), silently re-widening small popups.
+    pop->resize(pop->sizeHint());
+
+    // Right-aligned to the right column's left edge, top-aligned with the
+    // box, so the popup sits over the canvas rather than overlapping the
+    // (narrow) column. Pickers outside that column (e.g. the timeline's fps
+    // dropdown) have no "sidePanel" ancestor — fall back to a plain combo-box
+    // opening: right below the button.
+    QWidget* column = this;
+    bool foundSidePanel = false;
+    while (column->parentWidget()) {
+        if (column->objectName() == "sidePanel") { foundSidePanel = true; break; }
+        column = column->parentWidget();
+    }
+
+    QPoint pos;
+    if (foundSidePanel) {
+        const int columnLeftGlobalX = column->mapToGlobal(QPoint(0, 0)).x();
+        pos = QPoint(columnLeftGlobalX - pop->width(), mapToGlobal(QPoint(0, 0)).y());
+    } else {
+        pos = mapToGlobal(QPoint(0, height()));
+        if (pos.x() + pop->width() > avail.right())
+            pos.setX(mapToGlobal(QPoint(width(), 0)).x() - pop->width());
+    }
+    if (pos.y() + pop->height() > avail.bottom())
+        pos.setY(avail.bottom() - pop->height());
+    if (pos.y() < avail.top())
+        pos.setY(avail.top());
+    if (pos.x() < avail.left())
+        pos.setX(avail.left());
+    if (pos.x() + pop->width() > avail.right())
+        pos.setX(avail.right() - pop->width());
+    pop->move(pos);
+
+    setArrowOpen(true);
+    setProperty("popupOpen", true);
+    style()->unpolish(this);
+    style()->polish(this);
+    connect(pop, &QObject::destroyed, this, [this]() {
+        setArrowOpen(false);
+        setProperty("popupOpen", false);
+        style()->unpolish(this);
+        style()->polish(this);
+    });
+    pop->show();
+}
