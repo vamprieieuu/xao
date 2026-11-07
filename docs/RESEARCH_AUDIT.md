@@ -39,12 +39,12 @@ Repository: https://github.com/vamprieieuu/Dithering_MAJEED_build_ready
 
 Verified structure:
 - Native AE adapter in ae/ymdithers_ae.cpp.
-- Core algorithms in core/dither.cpp and core/lines.cpp.
+- Dither algorithms in core/dither.cpp. The separate Lines module is explicitly excluded from XAO by the user.
 - PiPL source in ae/Majeed_PiPL.r and generator ae/pipl_gen.py.
 - CMake project includes the AE SDK headers and builds a Windows x64 .aex.
 - GitHub Actions uses Windows 2022 + MSVC x64, configures CMake, builds Release, verifies the PE/exports/resources, and uploads the AEX.
 - Verification explicitly checks x64 PE32+, DLL characteristics, Windows GUI subsystem, EffectMain and PluginDataEntryFunction2 exports, and selected import/runtime properties.
-- The code exposes 49 dither/screen algorithms and a separate procedural Lines engine.
+- The code exposes 49 dither/screen algorithms. XAO may study and selectively port the dither algorithms only; the separate Lines effect/module must not be included, exposed, or ported.
 
 Important issues found — do not copy this repository blindly:
 1. The source uses PF_VERSION(1,0,0,RELEASE,1), which encodes to 0x00080601. The PiPL file currently contains AE_Effect_Version 67073 (0x00010601), which decodes to 0.2.0 release build 1. These do not match and must be aligned.
@@ -55,6 +55,11 @@ Important issues found — do not copy this repository blindly:
 6. CI verifies binary structure and exports, but that alone does not prove the plug-in loads and renders correctly in AE. Runtime validation remains mandatory.
 
 The PiPL global OutFlags and OutFlags2 values do match the C++ GLOBAL_SETUP values in this reference. Preserve this agreement and generate both from one source of truth in XAO.
+
+### Dither scope clarification (user decision, 2026-11-07)
+- XAO includes a Dither engine, but does **not** include the separate Lines effect from Dither Majid.
+- Do not port `core/lines.cpp`, its parameters, UI, presets, or any standalone Lines feature into XAO.
+- The Dither Majid repository remains a build/architecture and dither-algorithm reference only. The supplied XAO archive's `dither.cpp` is an OFX Bayer 4x4 implementation, not an AE-native plugin; use it as an algorithm reference and reimplement/adapt in the native AE core after validation.
 
 ## 5. Source projects — initial reuse classification
 
