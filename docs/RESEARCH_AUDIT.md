@@ -73,9 +73,17 @@ The PiPL global OutFlags and OutFlags2 values do match the C++ GLOBAL_SETUP valu
 ### Halftone
 - Halftone akam contains both LICENSE and LICENSE.md with different terms (MIT and a personal-use/non-commercial license). Treat as license-conflicted until clarified; do not copy code yet.
 - Halftone dean and Halftone lap have MIT license files and are candidates for selective reuse.
-- Halftone master is an older AE C++ project; its archive copy does not show a clear license. Inspect code for reference only until rights are established.
-- Halftone mike, Halftone eas, and Halftone ps require license verification before code reuse. Halftone ps is a Photoshop UXP project, not an AE-native implementation.
+- Halftone master and Halftone mike contain byte-identical copies of the same legacy AE C++ source (SHA-256 checked for Halftone.cpp, HalftoneSampler.hpp and HalftoneVector.hpp). The archive copy has no clear license, so use only for behavioral/algorithm research until rights are established. It documents 8/16-bit support; its TODO explicitly lists 32-bit support as unfinished.
+- The legacy AE implementation has useful screen geometry: rotated channel grids and round, square, Euclidean, ellipse, line, diamond and flower dot shapes, plus antialiasing and greyscale. Its old SDK target (CC 2015) means it is not a safe drop-in for AE 2023.
+- Halftone eas is an OFX implementation that includes a missing `../common/purzfx.hpp` dependency not present in the supplied archive, so it is not standalone/buildable from this archive as-is. It implements rotated mono and CMY dot screens with contrast/mix controls.
+- Halftone ps is a Photoshop UXP project, not an AE-native implementation; verify its exact license before any code reuse.
 - The archive currently contains seven named Halftone open-source project folders, not nine.
+
+### Halftone implementation notes
+- Halftone dean (MIT) offers a useful feature taxonomy: 13 screen styles, square/diagonal/hex/radial layouts, mono/CMYK/multi-channel separation, tone controls, grain/bleed/distortion, colour presets and JSON presets. It is Python/PySide6, so its UI/runtime is not an AE plugin.
+- Halftone lap (MIT) is browser Canvas code; useful for print concepts such as CMYK, bitmap, line screens, duotone/tritone, misregistration, ink spread and paper grain, but requires a native C++ reimplementation.
+- Halftone akam is excluded from code reuse because its bundled MIT LICENSE conflicts with LICENSE.md's personal-use-only/no-redistribution terms. Treat the restrictive terms as controlling unless the authors clarify otherwise.
+- Important distinction: excluding the standalone Dither Majid **Lines effect** does not automatically exclude a line-shaped halftone screen/dot geometry inside the Halftone engine. These are different effect concepts; XAO's halftone screen shapes remain subject to the visual references and later product design.
 
 ### Glow / Glint
 - HaloGlow: MIT and AE-native C++ project. Strong candidate for studying/reusing multi-scale glow, CPU/GPU parity, MFR, threshold, falloff, tint and alpha behavior, subject to dependency and code review.
