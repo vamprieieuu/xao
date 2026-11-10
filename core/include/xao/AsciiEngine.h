@@ -4,6 +4,7 @@ namespace xao {
 struct AsciiParams {
  int cellSize=8; float glyphScale=0.88f; float contrast=1.0f; float brightness=0.0f;
  bool invert=false; bool colorize=true; bool preserveCellAlpha=true;
+ // Ink and paper are linear-light premultiplied RGBA, matching Pixel.
  Pixel ink{1,1,1,1}; Pixel paper{0,0,0,0};
 };
 class AsciiEngine final : public Engine {
