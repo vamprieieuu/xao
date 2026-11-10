@@ -9,6 +9,9 @@ struct RenderContext {
     double timeSeconds = 0.0;
     std::int64_t frame = 0;
     float renderScale = 1.0f;
+    // Output resolution used by physical print-screen engines (e.g. LPI -> pixels).
+    // Defaults to 300 DPI; AE adapters should override when a reliable comp/output DPI is available.
+    float resolutionDpi = 300.0f;
     std::uint64_t seed = 0;
 };
 
