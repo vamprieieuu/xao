@@ -25,21 +25,18 @@ int main(){
     }
     if(!ink||!paper)return fail("glyph and transparent paper coverage");
     if(different)return fail("deterministic rendering");
-
     xao::Image transparent(8,8),transparentOut(8,8);
     xao::AsciiEngine defaultEngine;defaultEngine.render(transparent,transparentOut,{});
     for(const auto& q:transparentOut.pixels())if(q.a>1.0e-6f)return fail("transparent source remains transparent");
-
-    xao::AsciiParams solid;p=solid;p.colorize=false;p.preserveCellAlpha=false;
-    p.ink={0.25f,0.0f,0.0f,0.5f};p.paper={0.0f,0.0f,0.0f,0.0f};
-    xao::AsciiEngine alphaEngine(p);
+    xao::AsciiParams solid;solid.colorize=false;solid.preserveCellAlpha=false;
+    solid.ink={0.25f,0.0f,0.0f,0.5f};solid.paper={0.0f,0.0f,0.0f,0.0f};
+    xao::AsciiEngine alphaEngine(solid);
     xao::Image semi(8,8),semiOut(8,8);
     for(auto& q:semi.pixels())q={0.5f,0.0f,0.0f,0.5f};
     alphaEngine.render(semi,semiOut,{});
     bool foundInk=false;
     for(const auto& q:semiOut.pixels())if(near(q.r,0.25f)&&near(q.a,0.5f))foundInk=true;
     if(!foundInk)return fail("premultiplied ink color preserved without double alpha");
-
     bool threw=false;
     try{xao::Image wrong(15,16);engine.render(src,wrong,{});}catch(const std::invalid_argument&){threw=true;}
     if(!threw)return fail("dimension mismatch rejected");
