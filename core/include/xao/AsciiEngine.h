@@ -41,7 +41,7 @@ std::string_view asciiCharacterSetName(AsciiCharacterSetId id) noexcept;
 std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept;
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas();
 struct AsciiParams {
- int cellSize=12;
+ int cellSize=8;
  float glyphScale=0.88f;
  float characterSize=100.0f;
  float presetCharacterSize=100.0f;
@@ -56,8 +56,8 @@ struct AsciiParams {
  float cellMargin=0.0f;
  float contrast=1.0f;
  float brightness=0.0f;
- float randomAmount=0.35f;
- float randomSpeed=0.1f;
+ float randomAmount=0.85f;
+ float randomSpeed=1.0f;
  float gamma=2.2f;
  float edgeThreshold=0.15f;
  AsciiMappingMode mappingMode=AsciiMappingMode::Auto;
@@ -74,8 +74,8 @@ struct AsciiParams {
  bool antiAliasing=true;
  bool shapeMatch=false;
  bool randomCharacters=true;
- bool randomWords=false;
- bool randomTiming=false;
+ bool randomWords=true;
+ bool randomTiming=true;
  bool useClipScale=false;
  bool useCharacterSize=false;
  bool useNumberSize=false;
