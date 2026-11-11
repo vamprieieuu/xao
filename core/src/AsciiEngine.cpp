@@ -77,7 +77,7 @@ const GlyphBitmap* selectGlyph(const std::vector<const GlyphBitmap*>& candidates
   densityBest[pos]={g,d};if(densityCount<densityBest.size())++densityCount;
  }
  std::array<Score,32> shapeBest{};std::size_t shapeCount=0;
- const std::size_t shortlist=std::min<std::size_t>(densityCount,shape?24:1);
+ const std::size_t shortlist=std::min<std::size_t>(densityCount,shape?16:32);
  for(std::size_t i=0;i<shortlist;++i){const auto* g=densityBest[i].glyph;float score=0;
   if(shape){for(int y=0;y<8;++y)for(int x=0;x<8;++x){float m=maskAt(*g,(x+.5f)/8.0f,(y+.5f)/8.0f,false);float q=target[(std::size_t)y*8+x]-m;score+=q*q;}}
   else score=densityBest[i].value;
@@ -107,7 +107,7 @@ void applyCratesPreset(AsciiParams& p,AsciiPresetId id) noexcept{
 void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) const{
  if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
  if(src.empty())return;
- int w=src.width(),h=src.height(),cell=std::max(2,std::min(256,params_.cellSize));
+ int w=src.width(),h=src.height(),cell=std::max(2,std::min(512,params_.cellSize));
  if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
  float contrast=clampf(params_.contrast*(params_.asciiStrength/100.0f),0,4),brightness=clampf(params_.brightness,-1,1);
  float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f)*clampf(params_.presetCharacterSize/100.0f,.1f,3.0f);
