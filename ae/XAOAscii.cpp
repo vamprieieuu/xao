@@ -40,6 +40,8 @@ template<>float Quant<float>(float v,float){return v;}
 
 template<class PX>PF_Err Render(const PF_EffectWorld* s,PF_EffectWorld* d,const State& st,float maxv,const xao::RenderContext& ctx){
  if(!s||!d||!s->data||!d->data||s->width<=0||s->height<=0||d->width<0||d->height<0)return PF_Err_BAD_CALLBACK_PARAM;
+ const std::uint64_t pixelCount=(std::uint64_t)s->width*(std::uint64_t)s->height;
+ if(pixelCount>10000000ull)return PF_Err_OUT_OF_MEMORY; // Two full-frame linear RGBA buffers are allocated by the CPU core.
  const std::int64_t minSrcRow=(std::int64_t)s->width*(std::int64_t)sizeof(PX),minDstRow=(std::int64_t)d->width*(std::int64_t)sizeof(PX);
  if(s->rowbytes<minSrcRow||d->rowbytes<minDstRow)return PF_Err_BAD_CALLBACK_PARAM;
  xao::Image input(s->width,s->height),output(s->width,s->height);
