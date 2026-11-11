@@ -83,6 +83,8 @@ PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_CHECKBOXX("Arabic Numbers",0,0,P_ARABIC_NUMBERS);
  PF_ADD_CHECKBOXX("Arabic Words",0,0,P_ARABIC_WORDS);
  PF_ADD_POPUPX("Font Family",12,1,"Segoe UI Symbol|Consolas|IBM Plex Mono|VT323|Space Mono|Press Start 2P|Share Tech Mono|Courier Prime|IBM VGA|IBM EGA|Verite|DG One Bold",0,P_FONT);
+ PF_ADD_POPUPX("Glyph Mapping",3,1,"Auto|Shape Match|Luminance Ramp",0,P_MAPPING_MODE);
+ PF_ADD_FLOAT_SLIDERX("Gamma",0.1,4.0,0.1,4.0,2.2,PF_Precision_TENTHS,0,0,P_GAMMA);
  PF_ADD_POPUPX("Input Transfer",3,1,"Linear|Rec.709|sRGB",0,P_TRANSFER);
  PF_ADD_CHECKBOXX("Reverse Order",0,0,P_REVERSE_ORDER);
  PF_ADD_POPUPX("Uniform Luma",3,1,"Use Preset|Off|On",0,P_UNIFORM_LUMA);
@@ -132,6 +134,8 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  state->ascii.enableArabic=state->ascii.arabicLetters||state->ascii.arabicNumbers||state->ascii.arabicWords;
  A_long fontIndex=1;
  read(P_FONT,[&](PF_ParamDef& p){fontIndex=p.u.pd.value;});
+ read(P_MAPPING_MODE,[&](PF_ParamDef& p){state->ascii.mappingMode=(xao::AsciiMappingMode)std::clamp<A_long>(p.u.pd.value-1,0,2);});
+ read(P_GAMMA,[&](PF_ParamDef& p){state->ascii.gamma=(float)p.u.fs_d.value;});
  read(P_TRANSFER,[&](PF_ParamDef& p){state->transfer=p.u.pd.value;});
  read(P_REVERSE_ORDER,[&](PF_ParamDef& p){state->ascii.reverseOrder=p.u.bd.value!=0;});
  read(P_UNIFORM_LUMA,[&](PF_ParamDef& p){if(p.u.pd.value==2)state->ascii.uniformLuma=false;else if(p.u.pd.value==3)state->ascii.uniformLuma=true;});
