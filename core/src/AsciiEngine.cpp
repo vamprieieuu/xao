@@ -67,9 +67,10 @@ const GlyphBitmap* selectGlyph(const std::vector<const GlyphBitmap*>& candidates
  if(candidates.empty())return nullptr;
  struct Score{const GlyphBitmap* glyph=nullptr;float value=0;};
  std::array<Score,32> densityBest{};std::size_t densityCount=0;float mean=0;for(float v:target)mean+=v;mean/=64;
- for(const auto* g:candidates){float d=std::fabs(mean-g->density);std::size_t pos=densityCount;
-  if(pos>=densityBest.size())pos=densityBest.size()-1;
-  while(pos>0&&densityBest[pos-1].value>d){if(pos<densityBest.size())densityBest[pos]=densityBest[pos-1];--pos;}
+ for(const auto* g:candidates){float d=std::fabs(mean-g->density);
+  if(densityCount==densityBest.size()&&d>=densityBest.back().value)continue;
+  std::size_t pos=std::min(densityCount,densityBest.size()-1);
+  while(pos>0&&densityBest[pos-1].value>d){densityBest[pos]=densityBest[pos-1];--pos;}
   densityBest[pos]={g,d};if(densityCount<densityBest.size())++densityCount;
  }
  std::array<Score,32> shapeBest{};std::size_t shapeCount=0;
