@@ -48,7 +48,7 @@ std::wstring fontFace(int id){
  std::lock_guard<std::mutex> lock(mutex);auto it=faces.find(id);if(it!=faces.end())return it->second;
  HMODULE module=nullptr;GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&buildGlyphAtlas),&module);
  std::wstring face=(id==0?L"Consolas":L"Segoe UI Symbol");
- if(module){HRSRC res=FindResourceW(module,MAKEINTRESOURCEW(id),RT_RCDATA);if(res){HGLOBAL loadedResource=LoadResource(module,res);const BYTE* bytes=(const BYTE*)LockResource(loadedResource);DWORD size=SizeofResource(module,res);if(bytes&&size){auto name=sfntFamily(bytes,size);if(!name.empty())face=name;DWORD count=0;HANDLE handle=AddFontMemResourceEx((void*)bytes,size,nullptr,&count);if(handle)loaded.push_back(handle);}}}
+ if(module){HRSRC res=FindResourceW(module,MAKEINTRESOURCEW(id),MAKEINTRESOURCEW(10));if(res){HGLOBAL loadedResource=LoadResource(module,res);const BYTE* bytes=(const BYTE*)LockResource(loadedResource);DWORD size=SizeofResource(module,res);if(bytes&&size){auto name=sfntFamily(bytes,size);if(!name.empty())face=name;DWORD count=0;HANDLE handle=AddFontMemResourceEx((void*)bytes,size,nullptr,&count);if(handle)loaded.push_back(handle);}}}
  faces.emplace(id,face);return face;
 }
 bool hasGlyph(HDC dc,const std::wstring& text){if(text.empty())return false;std::vector<WORD> glyphs(text.size());DWORD result=GetGlyphIndicesW(dc,text.c_str(),(int)text.size(),glyphs.data(),GGI_MARK_NONEXISTING_GLYPHS);return result!=GDI_ERROR&&std::find(glyphs.begin(),glyphs.end(),(WORD)0xFFFF)==glyphs.end();}
