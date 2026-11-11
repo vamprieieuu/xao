@@ -31,7 +31,7 @@ enum {
  P_GLOW_ENABLE,P_GLOW_SELECTION,P_GLOW_FILTER,P_GLOW_AMOUNT,P_GLOW_RADIUS,P_GLOW_INTENSITY,P_GLOW_X,P_GLOW_Y,P_GLOW_REGION,
  P_RAYS_ENABLE,P_RAYS_COUNT,P_RAYS_ANGLE,P_RAYS_SPREAD,P_RAYS_LENGTH,P_RAYS_INTENSITY,P_RAYS_SHARPNESS,P_RAYS_X,P_RAYS_Y,
  P_OVERRIDE_PRESET,P_INVERT_THRESHOLD,P_SMOOTH_SHADING,P_BLEND_ORIGINAL,P_RANDOM_COLOR_AMOUNT,P_X_FLIP_THRESHOLD,P_PRESERVE_ALPHA,
- P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_VISUAL_STYLE,P_THRESHOLD_LEVEL,P_THRESHOLD_WIDTH,P_THRESHOLD_SPACING,P_WORD_SIZE,P_COUNT
+ P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_VISUAL_STYLE,P_THRESHOLD_LEVEL,P_THRESHOLD_WIDTH,P_THRESHOLD_SPACING,P_WORD_SIZE,P_TINT_COLOR,P_PAPER_COLOR,P_GLOW_COLOR,P_RAYS_COLOR,P_COUNT
 };
 enum { T_LINEAR=1,T_REC709=2,T_SRGB=3 };
 struct State { xao::AsciiParams ascii; A_long transfer=T_LINEAR; };
@@ -110,6 +110,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Glow Amount",0,100,0,100,20,PF_Precision_INTEGER,0,0,P_GLOW_AMOUNT);
  PF_ADD_FLOAT_SLIDERX("Glow Radius",0,64,0,64,8,PF_Precision_INTEGER,0,0,P_GLOW_RADIUS);
  PF_ADD_FLOAT_SLIDERX("Glow Intensity",0,500,0,500,100,PF_Precision_INTEGER,0,0,P_GLOW_INTENSITY);
+ AEFX_CLR_STRUCT(def);PF_ADD_COLOR("Glow Color",255,56,9,P_GLOW_COLOR);
  PF_ADD_FLOAT_SLIDERX("Glow Position X",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_GLOW_X);
  PF_ADD_FLOAT_SLIDERX("Glow Position Y",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_GLOW_Y);
  PF_ADD_FLOAT_SLIDERX("Glow Region Size",1,100,1,100,25,PF_Precision_INTEGER,0,0,P_GLOW_REGION);
@@ -119,10 +120,13 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Ray Spread",1,360,1,360,360,PF_Precision_INTEGER,0,0,P_RAYS_SPREAD);
  PF_ADD_FLOAT_SLIDERX("Ray Length",1,200,1,200,100,PF_Precision_INTEGER,0,0,P_RAYS_LENGTH);
  PF_ADD_FLOAT_SLIDERX("Ray Intensity",0,500,0,500,100,PF_Precision_INTEGER,0,0,P_RAYS_INTENSITY);
+ AEFX_CLR_STRUCT(def);PF_ADD_COLOR("Ray Color",255,75,130,P_RAYS_COLOR);
  PF_ADD_FLOAT_SLIDERX("Ray Sharpness",1,20,1,20,6,PF_Precision_INTEGER,0,0,P_RAYS_SHARPNESS);
  PF_ADD_FLOAT_SLIDERX("Ray Origin X",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_RAYS_X);
  PF_ADD_FLOAT_SLIDERX("Ray Origin Y",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_RAYS_Y);
  PF_ADD_CHECKBOXX("Override Preset Tuning",0,0,P_OVERRIDE_PRESET);
+ AEFX_CLR_STRUCT(def);PF_ADD_COLOR("Tint Color",255,255,255,P_TINT_COLOR);
+ AEFX_CLR_STRUCT(def);PF_ADD_COLOR("Background Color",0,0,0,P_PAPER_COLOR);
  PF_ADD_FLOAT_SLIDERX("Invert Threshold",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_INVERT_THRESHOLD);
  PF_ADD_FLOAT_SLIDERX("Smooth Shading",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_SMOOTH_SHADING);
  PF_ADD_FLOAT_SLIDERX("Blend With Original",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_BLEND_ORIGINAL);
@@ -195,6 +199,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_GLOW_AMOUNT,[&](PF_ParamDef& p){state->ascii.glowAmount=(float)p.u.fs_d.value/100.0f;});
  read(P_GLOW_RADIUS,[&](PF_ParamDef& p){state->ascii.glowRadius=(float)p.u.fs_d.value;});
  read(P_GLOW_INTENSITY,[&](PF_ParamDef& p){state->ascii.glowIntensity=(float)p.u.fs_d.value/100.0f;});
+ read(P_GLOW_COLOR,[&](PF_ParamDef& p){state->ascii.glowColor={(float)p.u.cd.value.red/255.0f,(float)p.u.cd.value.green/255.0f,(float)p.u.cd.value.blue/255.0f,(float)p.u.cd.value.alpha/255.0f};});
  read(P_GLOW_X,[&](PF_ParamDef& p){state->ascii.glowCenterX=(float)p.u.fs_d.value/100.0f;});
  read(P_GLOW_Y,[&](PF_ParamDef& p){state->ascii.glowCenterY=(float)p.u.fs_d.value/100.0f;});
  read(P_GLOW_REGION,[&](PF_ParamDef& p){state->ascii.glowRegionSize=(float)p.u.fs_d.value/100.0f;});
@@ -204,12 +209,15 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_RAYS_SPREAD,[&](PF_ParamDef& p){state->ascii.raysSpread=(float)p.u.fs_d.value;});
  read(P_RAYS_LENGTH,[&](PF_ParamDef& p){state->ascii.raysLength=(float)p.u.fs_d.value/100.0f;});
  read(P_RAYS_INTENSITY,[&](PF_ParamDef& p){state->ascii.raysIntensity=(float)p.u.fs_d.value/100.0f;});
+ read(P_RAYS_COLOR,[&](PF_ParamDef& p){state->ascii.raysColor={(float)p.u.cd.value.red/255.0f,(float)p.u.cd.value.green/255.0f,(float)p.u.cd.value.blue/255.0f,(float)p.u.cd.value.alpha/255.0f};});
  read(P_RAYS_SHARPNESS,[&](PF_ParamDef& p){state->ascii.raysSharpness=(float)p.u.fs_d.value;});
  read(P_RAYS_X,[&](PF_ParamDef& p){state->ascii.raysOriginX=(float)p.u.fs_d.value/100.0f;});
  read(P_RAYS_Y,[&](PF_ParamDef& p){state->ascii.raysOriginY=(float)p.u.fs_d.value/100.0f;});
  bool overridePresetTuning=false;
  read(P_OVERRIDE_PRESET,[&](PF_ParamDef& p){overridePresetTuning=p.u.bd.value!=0;});
  if(overridePresetTuning){
+  read(P_TINT_COLOR,[&](PF_ParamDef& p){state->ascii.tintColor={(float)p.u.cd.value.red/255.0f,(float)p.u.cd.value.green/255.0f,(float)p.u.cd.value.blue/255.0f,1.0f};});
+  read(P_PAPER_COLOR,[&](PF_ParamDef& p){state->ascii.paper={(float)p.u.cd.value.red/255.0f,(float)p.u.cd.value.green/255.0f,(float)p.u.cd.value.blue/255.0f,1.0f};});
   read(P_INVERT_THRESHOLD,[&](PF_ParamDef& p){state->ascii.invertThreshold=(float)p.u.fs_d.value;});
   read(P_SMOOTH_SHADING,[&](PF_ParamDef& p){state->ascii.smoothShading=(float)p.u.fs_d.value;});
   read(P_BLEND_ORIGINAL,[&](PF_ParamDef& p){state->ascii.blendWithOriginal=(float)p.u.fs_d.value;});
