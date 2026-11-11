@@ -1,6 +1,13 @@
 name: XAO Native AE Build
 on:
  workflow_dispatch:
+ push:
+  branches:
+   - xao/recovery-baseline-2026-11-10
+  paths:
+   - 'CMakeLists.txt'
+   - 'core/**'
+   - 'ae/**'
 permissions:
  contents: write
 jobs:

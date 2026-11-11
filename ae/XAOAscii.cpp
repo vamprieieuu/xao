@@ -161,6 +161,6 @@ PF_Err Smart(PF_InData* in,PF_OutData* out,PF_SmartRenderExtra* e){
 }
 extern "C" DllExport int PluginDataEntryFunction2(void* a,void* b,int c,int d){(void)a;(void)b;(void)c;(void)d;return 0;}
 extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,PF_InData* in,PF_OutData* out,PF_ParamDef*[],PF_LayerDef*,void* extra){
- try{switch(cmd){case PF_Cmd_ABOUT:PF_SPRINTF(out->return_msg,"XAO 1.1\rNative ASCII engine");return PF_Err_NONE;case PF_Cmd_GLOBAL_SETUP:return Global(out);case PF_Cmd_PARAMS_SETUP:return Params(in,out);case PF_Cmd_SMART_PRE_RENDER:return Pre(in,out,(PF_PreRenderExtra*)extra);case PF_Cmd_SMART_RENDER:return Smart(in,out,(PF_SmartRenderExtra*)extra);default:return PF_Err_NONE;}}
+ try{switch(cmd){case PF_Cmd_ABOUT:PF_SPRINTF(out->return_msg,"XAO 1.2\rNative ASCII engine");return PF_Err_NONE;case PF_Cmd_GLOBAL_SETUP:return Global(out);case PF_Cmd_PARAMS_SETUP:return Params(in,out);case PF_Cmd_SMART_PRE_RENDER:return Pre(in,out,(PF_PreRenderExtra*)extra);case PF_Cmd_SMART_RENDER:return Smart(in,out,(PF_SmartRenderExtra*)extra);default:return PF_Err_NONE;}}
  catch(const std::bad_alloc&){return PF_Err_OUT_OF_MEMORY;}catch(...){return PF_Err_INTERNAL_STRUCT_DAMAGED;}
 }
