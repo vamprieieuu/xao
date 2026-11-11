@@ -64,7 +64,7 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  const float ancientScale=p.useAncientSize?std::clamp(p.ancientSize/100.0f,.1f,3.0f):1.0f;
  const float englishScale=p.useEnglishSize?std::clamp(p.englishSize/100.0f,.1f,3.0f):1.0f;
  const float arabicScale=p.useArabicSize?std::clamp(p.arabicSize/100.0f,.1f,3.0f):1.0f;
- for(int id=0;id<=18;++id){const int font=(id==13)?ancientFont:0;addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),font);}
+ for(int id=0;id<=18;++id){const int font=(id==13||id==3)?ancientFont:0;addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),font);}
  for(int id=24;id<=26;++id)addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),0);
  switch(p.characterSet){case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF,0);break;case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6,0);break;case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F,0);break;case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F,0);break;case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F,0);break;default:break;}
  const std::u32string ancient=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψωᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
