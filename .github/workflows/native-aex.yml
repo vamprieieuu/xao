@@ -10,6 +10,7 @@ on:
   paths:
    - 'CMakeLists.txt'
    - 'core/**'
+   - 'tests/**'
    - 'ae/**'
    - '.github/workflows/**'
 permissions:
