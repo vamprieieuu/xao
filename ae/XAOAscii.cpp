@@ -29,6 +29,7 @@ enum {
  P_ARABIC_LETTERS,P_ARABIC_NUMBERS,P_ARABIC_WORDS,
  P_FONT,P_MAPPING_MODE,P_GAMMA,P_CHANNEL_MODE,P_EDGE_THRESHOLD,
  P_GLOW_ENABLE,P_GLOW_SELECTION,P_GLOW_FILTER,P_GLOW_AMOUNT,P_GLOW_RADIUS,P_GLOW_INTENSITY,P_GLOW_X,P_GLOW_Y,P_GLOW_REGION,
+ P_RAYS_ENABLE,P_RAYS_COUNT,P_RAYS_ANGLE,P_RAYS_SPREAD,P_RAYS_LENGTH,P_RAYS_INTENSITY,P_RAYS_SHARPNESS,P_RAYS_X,P_RAYS_Y,
  P_OVERRIDE_PRESET,P_INVERT_THRESHOLD,P_SMOOTH_SHADING,P_BLEND_ORIGINAL,P_RANDOM_COLOR_AMOUNT,P_X_FLIP_THRESHOLD,P_PRESERVE_ALPHA,
  P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_COUNT
 };
@@ -102,6 +103,15 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Glow Position X",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_GLOW_X);
  PF_ADD_FLOAT_SLIDERX("Glow Position Y",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_GLOW_Y);
  PF_ADD_FLOAT_SLIDERX("Glow Region Size",1,100,1,100,25,PF_Precision_INTEGER,0,0,P_GLOW_REGION);
+ PF_ADD_CHECKBOXX("Light Rays",0,0,P_RAYS_ENABLE);
+ PF_ADD_FLOAT_SLIDERX("Ray Count",1,64,1,64,18,PF_Precision_INTEGER,0,0,P_RAYS_COUNT);
+ PF_ADD_FLOAT_SLIDERX("Ray Angle",0,360,0,360,0,PF_Precision_INTEGER,0,0,P_RAYS_ANGLE);
+ PF_ADD_FLOAT_SLIDERX("Ray Spread",1,360,1,360,360,PF_Precision_INTEGER,0,0,P_RAYS_SPREAD);
+ PF_ADD_FLOAT_SLIDERX("Ray Length",1,200,1,200,100,PF_Precision_INTEGER,0,0,P_RAYS_LENGTH);
+ PF_ADD_FLOAT_SLIDERX("Ray Intensity",0,500,0,500,100,PF_Precision_INTEGER,0,0,P_RAYS_INTENSITY);
+ PF_ADD_FLOAT_SLIDERX("Ray Sharpness",1,20,1,20,6,PF_Precision_INTEGER,0,0,P_RAYS_SHARPNESS);
+ PF_ADD_FLOAT_SLIDERX("Ray Origin X",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_RAYS_X);
+ PF_ADD_FLOAT_SLIDERX("Ray Origin Y",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_RAYS_Y);
  PF_ADD_CHECKBOXX("Override Preset Tuning",0,0,P_OVERRIDE_PRESET);
  PF_ADD_FLOAT_SLIDERX("Invert Threshold",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_INVERT_THRESHOLD);
  PF_ADD_FLOAT_SLIDERX("Smooth Shading",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_SMOOTH_SHADING);
@@ -168,6 +178,15 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_GLOW_X,[&](PF_ParamDef& p){state->ascii.glowCenterX=(float)p.u.fs_d.value/100.0f;});
  read(P_GLOW_Y,[&](PF_ParamDef& p){state->ascii.glowCenterY=(float)p.u.fs_d.value/100.0f;});
  read(P_GLOW_REGION,[&](PF_ParamDef& p){state->ascii.glowRegionSize=(float)p.u.fs_d.value/100.0f;});
+ read(P_RAYS_ENABLE,[&](PF_ParamDef& p){state->ascii.raysEnabled=p.u.bd.value!=0;});
+ read(P_RAYS_COUNT,[&](PF_ParamDef& p){state->ascii.raysCount=(float)p.u.fs_d.value;});
+ read(P_RAYS_ANGLE,[&](PF_ParamDef& p){state->ascii.raysAngle=(float)p.u.fs_d.value;});
+ read(P_RAYS_SPREAD,[&](PF_ParamDef& p){state->ascii.raysSpread=(float)p.u.fs_d.value;});
+ read(P_RAYS_LENGTH,[&](PF_ParamDef& p){state->ascii.raysLength=(float)p.u.fs_d.value/100.0f;});
+ read(P_RAYS_INTENSITY,[&](PF_ParamDef& p){state->ascii.raysIntensity=(float)p.u.fs_d.value/100.0f;});
+ read(P_RAYS_SHARPNESS,[&](PF_ParamDef& p){state->ascii.raysSharpness=(float)p.u.fs_d.value;});
+ read(P_RAYS_X,[&](PF_ParamDef& p){state->ascii.raysOriginX=(float)p.u.fs_d.value/100.0f;});
+ read(P_RAYS_Y,[&](PF_ParamDef& p){state->ascii.raysOriginY=(float)p.u.fs_d.value/100.0f;});
  bool overridePresetTuning=false;
  read(P_OVERRIDE_PRESET,[&](PF_ParamDef& p){overridePresetTuning=p.u.bd.value!=0;});
  if(overridePresetTuning){
