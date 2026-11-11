@@ -66,7 +66,8 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  const float arabicScale=p.useArabicSize?std::clamp(p.arabicSize/100.0f,.1f,3.0f):1.0f;
  int presetFont=0;
  switch(p.preset){
-  case AsciiPresetId::AlienSignal:case AsciiPresetId::Diamonds:presetFont=resourceFor(0,1);break;
+  case AsciiPresetId::AlienSignal:presetFont=resourceFor(0,1);break;
+  case AsciiPresetId::Diamonds:presetFont=resourceFor(0,3);break;
   case AsciiPresetId::Corrupted:case AsciiPresetId::Motherboard:presetFont=resourceFor(0,4);break;
   case AsciiPresetId::Classic:presetFont=resourceFor(1,1);break;
   case AsciiPresetId::Crossword:presetFont=resourceFor(1,5);break;
