@@ -131,8 +131,22 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!groups&&!set.empty()&&!g.wordToken&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
  if(candidates.empty()&&!params_.randomWords)for(const auto& g:builtinAsciiGlyphAtlas()->glyphs)candidates.push_back(&g);
  if(candidates.empty())return;
- for(int y0=0;y0<h;y0+=cell)for(int x0=0;x0<w;x0+=cell){
-  int x1=std::min(w,x0+cell),y1=std::min(h,y0+cell);std::array<float,64> target{};Pixel avg{0,0,0,0};double alphaSum=0;int n=0;
+ for(int y0=0,rowIndex=0;y0<h;++rowIndex){
+  int rowHeight=cell;
+  if(params_.layoutMode==AsciiLayoutMode::LiquidPanels){
+   const int minH=std::clamp(std::min(params_.panelMinHeight,params_.panelMaxHeight),1,8),maxH=std::clamp(std::max(params_.panelMinHeight,params_.panelMaxHeight),1,8);
+   rowHeight=cell*(minH+(int)(hash32(params_.randomSeed^(std::uint32_t)rowIndex*0x9E3779B9u)%(std::uint32_t)(maxH-minH+1)));
+  }
+  const int y1=std::min(h,y0+rowHeight);
+  for(int x0=0,colIndex=0;x0<w;++colIndex){
+   int colWidth=cell;
+   if(params_.layoutMode==AsciiLayoutMode::LiquidPanels){
+    const int minW=std::clamp(std::min(params_.panelMinWidth,params_.panelMaxWidth),1,8),maxW=std::clamp(std::max(params_.panelMinWidth,params_.panelMaxWidth),1,8);
+    const std::uint32_t panelSeed=params_.randomSeed^((std::uint32_t)rowIndex*0x85EBCA6Bu)^((std::uint32_t)colIndex*0xC2B2AE35u);
+    colWidth=cell*(minW+(int)(hash32(panelSeed)%(std::uint32_t)(maxW-minW+1)));
+   }
+   const int x1=std::min(w,x0+colWidth);
+   std::array<float,64> target{};Pixel avg{0,0,0,0};double alphaSum=0;int n=0;
   for(int sy=0;sy<8;++sy)for(int sx=0;sx<8;++sx){int px=std::min(x1-1,x0+(int)((sx+.5f)*(x1-x0)/8.0f)),py=std::min(y1-1,y0+(int)((sy+.5f)*(y1-y0)/8.0f));const Pixel& p=src.row(py)[px];float a=clamp01(p.a);target[(std::size_t)sy*8+sx]=clamp01((1-sampleChannel(p,params_.channelMode))*a);avg.r+=p.r;avg.g+=p.g;avg.b+=p.b;avg.a+=p.a;alphaSum+=a;++n;}
   float inv=1.0f/n;avg.r*=inv;avg.g*=inv;avg.b*=inv;avg.a*=inv;float mean=0;for(float v:target)mean+=v;mean/=64;
   if(params_.uniformLuma)for(float& v:target)v=mean;
@@ -140,7 +154,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(params_.invert)for(float& v:target)if(v>=clamp01(params_.invertThreshold/100.0f))v=1-v;
   const float gamma=clampf(params_.gamma,0.1f,4.0f);
   for(float& v:target){v=std::pow(clamp01(applyAsciiToneMap(v,contrast,brightness)),1.0f/gamma);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
-  std::uint32_t ci=(std::uint32_t)((y0/cell)*((w+cell-1)/cell)+(x0/cell));double time=std::max(0.0,ctx.timeSeconds);
+  std::uint32_t ci=hash32(params_.randomSeed^((std::uint32_t)rowIndex*0x9E3779B9u)^((std::uint32_t)colIndex*0x85EBCA6Bu));double time=std::max(0.0,ctx.timeSeconds);
   bool animate=params_.randomCharacters||params_.randomWords;
   double cellSpeed=1.0+clampf(params_.randomSpeed,0,10)*24.0;
   if(params_.randomTiming){
@@ -197,6 +211,9 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   }
   bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
   for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<x1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);if(glowCell)glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],c*alpha);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
+   x0=x1;
+  }
+  y0=y1;
  }
  if(params_.glowEnabled&&!glowMask.empty()){
   const int radius=std::clamp((int)std::lround(params_.glowRadius),0,64);
