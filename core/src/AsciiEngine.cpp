@@ -194,11 +194,11 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(glyph->wordToken&&drawX1>x1){Pixel wa{0,0,0,0};int wn=0;for(int yy=y0;yy<y1;++yy)for(int xx=x0;xx<drawX1;++xx){const Pixel& q=src.row(yy)[xx];wa.r+=q.r;wa.g+=q.g;wa.b+=q.b;wa.a+=q.a;++wn;}if(wn){float wi=1.0f/(float)wn;avg={wa.r*wi,wa.g*wi,wa.b*wi,wa.a*wi};}}
   if(params_.visualStyle==AsciiVisualStyle::Photorealistic){const Pixel& center=src.at((x0+x1)/2,(y0+y1)/2);const float m=0.16f;avg.r=avg.r*(1-m)+center.r*m;avg.g=avg.g*(1-m)+center.g*m;avg.b=avg.b*(1-m)+center.b*m;}
   Pixel fg=(params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)?avg:params_.ink;if((params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
-  if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
+  if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   if(params_.visualStyle==AsciiVisualStyle::Glitch){const float glitch=(float)((rv>>16)&255u)/255.0f;const float flicker=0.72f+0.28f*std::fabs(std::sin((float)time*18.0f+glitch*6.28318f));fg.r=clamp01(fg.r*(0.65f+glitch*0.9f));fg.g=clamp01(fg.g*(0.7f+(1.0f-glitch)*0.7f));fg.b=clamp01(fg.b*(0.75f+glitch*0.8f));fg=scaled(fg,flicker);}
   if(params_.visualStyle==AsciiVisualStyle::CGO){const float accent=(float)(rv&255u)/255.0f;if(accent>0.78f){fg.r=std::max(fg.r,0.78f);fg.g=std::max(fg.g,0.16f+0.22f*accent);fg.b*=0.35f;}}
   if(params_.visualStyle==AsciiVisualStyle::Rainbow){
-   const float hue=std::fmod((float)ci*0.000013f+(float)time*0.18f+mean*0.22f,1.0f)*6.0f;
+   const std::uint32_t patch=hash32(params_.randomSeed^(std::uint32_t)(x0/std::max(1,cell*4))*0x9E3779B9u^(std::uint32_t)(y0/std::max(1,cell*4))*0x85EBCA6Bu);const float hue=std::fmod((float)(patch&0xFFFFu)/65535.0f*0.72f+(float)time*0.035f+mean*0.08f,1.0f)*6.0f;
    const float chroma=0.28f+0.72f*clamp01(mean),xh=chroma*(1.0f-std::fabs(std::fmod(hue,2.0f)-1.0f));
    float rr=0,gg=0,bb=0;
    if(hue<1){rr=chroma;gg=xh;}else if(hue<2){rr=xh;gg=chroma;}else if(hue<3){gg=chroma;bb=xh;}else if(hue<4){gg=xh;bb=chroma;}else if(hue<5){rr=xh;bb=chroma;}else{rr=chroma;bb=xh;}
@@ -249,18 +249,20 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   }
  }
  if(params_.visualStyle==AsciiVisualStyle::Threshold){
-  for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)=scaled(src.at(x,y),0.18f);
-  const int rowStep=std::clamp(params_.thresholdRowSpacing,3,48),segment=std::clamp(params_.thresholdSegmentWidth,8,512);
-  const int barHeight=std::max(1,rowStep/3);const float phase=(float)ctx.timeSeconds*1.7f;
+  for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)=scaled(src.at(x,y),0.38f);
+  const int rowStep=std::clamp(cell,3,48),segment=std::clamp(cell*3,8,512);
+  const int barHeight=std::max(1,rowStep/3);const float phase=(float)ctx.timeSeconds*1.7f;const float amount=clamp01(params_.asciiAmount/100.0f);
   for(int y=0,row=0;y<h;y+=rowStep,++row)for(int x=0,col=0;x<w;x+=segment,++col){
-   const int xEnd=std::min(w,x+segment);float lum=0.0f;Pixel color{0,0,0,0};int count=0;
-   for(int sy=y;sy<std::min(h,y+rowStep);++sy)for(int sx=x;sx<xEnd;++sx){const Pixel& q=src.at(sx,sy);lum+=sampleChannel(q,AsciiChannelMode::Luma);color.r+=q.r;color.g+=q.g;color.b+=q.b;color.a+=q.a;++count;}
+   const int xEnd=std::min(w,x+segment);float lum=0.0f;float alphaSum=0.0f;int count=0;
+   for(int sy=y;sy<std::min(h,y+rowStep);++sy)for(int sx=x;sx<xEnd;++sx){const Pixel& q=src.at(sx,sy);lum+=sampleChannel(q,params_.channelMode);alphaSum+=q.a;++count;}
    if(!count)continue;const float l=clamp01(lum/(float)count);const int length=std::max(1,(int)std::lround((float)(xEnd-x)*(0.16f+0.84f*l)));
    const int shift=(int)(hash32(params_.randomSeed^(std::uint32_t)row*0x9E3779B9u^(std::uint32_t)col*0x85EBCA6Bu)%std::max(1,segment/3));
-   const float inv=1.0f/(float)count;color.r*=inv;color.g*=inv;color.b*=inv;color.a*=inv;
-   const float alpha=clamp01(color.a)*(0.42f+0.58f*l);const int sx0=std::min(w-1,x+((int)phase+shift)%(std::max(1,segment/3)));
-   for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=sx0;xx<std::min(w,sx0+length);++xx){Pixel bar=scaled(color,alpha);Pixel& d=dst.at(xx,yy);const float invA=1.0f-bar.a;d={bar.r+d.r*invA,bar.g+d.g*invA,bar.b+d.b*invA,bar.a+d.a*invA};}
+   const float sourceAlpha=clamp01(alphaSum/(float)count);const float barLuma=0.20f+0.80f*l;const float alpha=sourceAlpha*(0.62f+0.38f*l)*amount;
+   const int sx0=std::min(w-1,x+((int)phase+shift)%(std::max(1,segment/3)));
+   for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=sx0;xx<std::min(w,sx0+length);++xx){Pixel bar=scaled(Pixel{barLuma,barLuma,barLuma,1.0f},alpha);Pixel& d=dst.at(xx,yy);const float invA=1.0f-bar.a;d={bar.r+d.r*invA,bar.g+d.g*invA,bar.b+d.b*invA,bar.a+d.a*invA};}
   }
+  const float fade=clamp01(params_.blendWithOriginal/100.0f);if(fade>0)for(int y=0;y<h;++y)for(int x=0;x<w;++x){Pixel& d=dst.at(x,y);const Pixel& o=src.at(x,y);d.r=d.r*(1-fade)+o.r*fade;d.g=d.g*(1-fade)+o.g*fade;d.b=d.b*(1-fade)+o.b*fade;d.a=d.a*(1-fade)+o.a*fade;}
+ }
  }
 }
 } // namespace xao
