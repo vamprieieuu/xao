@@ -200,6 +200,20 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    if(hue<1){rr=chroma;gg=xh;}else if(hue<2){rr=xh;gg=chroma;}else if(hue<3){gg=chroma;bb=xh;}else if(hue<4){gg=xh;bb=chroma;}else if(hue<5){rr=xh;bb=chroma;}else{rr=chroma;bb=xh;}
    fg.r=rr+0.12f;fg.g=gg+0.12f;fg.b=bb+0.12f;fg.a=1.0f;
   }
+  if(params_.paletteIndex>0&&params_.paletteIndex<=kS1PaletteCount){
+   const auto* palette=s1Palette((S1PaletteId)params_.paletteIndex);
+   if(palette&&palette->count){
+    const float invAlpha=1.0f/std::max(avg.a,1.0e-6f);
+    const float tone=clamp01(.2126f*avg.r*invAlpha+.7152f*avg.g*invAlpha+.0722f*avg.b*invAlpha);
+    const float position=tone*(float)(palette->count-1);
+    const std::size_t lo=(std::size_t)position,hi=std::min(lo+1,palette->count-1);
+    const float blend=position-(float)lo;
+    auto channel=[&](std::uint8_t ca,std::uint8_t cb){return srgbToLinear(((float)ca*(1.0f-blend)+(float)cb*blend)/255.0f);};
+    const Pixel color{channel(palette->colors[lo].r,palette->colors[hi].r),channel(palette->colors[lo].g,palette->colors[hi].g),channel(palette->colors[lo].b,palette->colors[hi].b),1.0f};
+    const float amount=clamp01(params_.paletteStrength/100.0f);
+    fg.r=fg.r*(1.0f-amount)+color.r*amount;fg.g=fg.g*(1.0f-amount)+color.g*amount;fg.b=fg.b*(1.0f-amount)+color.b*amount;
+   }
+  }
   fg=scaled(fg,alpha);Pixel bg=params_.preserveCellAlpha?scaled(params_.paper,alpha):params_.paper;
   bool glowCell=false;
   if(params_.glowEnabled||styleGlow){
