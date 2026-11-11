@@ -44,8 +44,8 @@ HRESULT drawShapedText(HDC dc,const Token& token){
  HRESULT hr=ScriptStringAnalyse(dc,token.text.c_str(),(int)token.text.size(),0,-1,flags,kAtlasW,nullptr,nullptr,nullptr,nullptr,nullptr,&analysis);
  if(FAILED(hr))return hr;
  const SIZE* extent=ScriptString_pSize(analysis);
- int x=extent?std::max(0,(kAtlasW-extent->cx)/2):0;
- int y=extent?std::max(0,(kAtlasH-extent->cy)/2):0;
+ int x=extent?std::max(0,(kAtlasW-(int)extent->cx)/2):0;
+ int y=extent?std::max(0,(kAtlasH-(int)extent->cy)/2):0;
  hr=ScriptStringOut(analysis,x,y,0,nullptr,0,-1,FALSE);
  ScriptStringFree(&analysis);
  return hr;
