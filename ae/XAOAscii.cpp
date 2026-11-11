@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <new>
 #ifndef PF_OutFlag2_SUPPORTS_THREADED_RENDERING
 #define PF_OutFlag2_SUPPORTS_THREADED_RENDERING (1L << 27)
@@ -26,7 +27,10 @@ template<class T>float Unit(T v,float maxv){return static_cast<float>(v)/maxv;}
 template<class T>T Quant(float v,float maxv){return static_cast<T>(std::lround(std::clamp(v,0.f,1.f)*maxv));}
 template<>float Quant<float>(float v,float){return v;}
 template<class PX>PF_Err Render(const PF_EffectWorld* s,PF_EffectWorld* d,const State& st,float maxv,const xao::RenderContext& ctx){
- if(!s||!d||!s->data||!d->data||s->width<=0||s->height<=0)return PF_Err_BAD_CALLBACK_PARAM;
+ if(!s||!d||!s->data||!d->data||s->width<=0||s->height<=0||d->width<0||d->height<0)return PF_Err_BAD_CALLBACK_PARAM;
+ const std::int64_t minSrcRow=static_cast<std::int64_t>(s->width)*static_cast<std::int64_t>(sizeof(PX));
+ const std::int64_t minDstRow=static_cast<std::int64_t>(d->width)*static_cast<std::int64_t>(sizeof(PX));
+ if(s->rowbytes<minSrcRow||d->rowbytes<minDstRow)return PF_Err_BAD_CALLBACK_PARAM;
  xao::Image input(s->width,s->height),output(s->width,s->height);
  for(A_long y=0;y<s->height;++y){const auto* row=reinterpret_cast<const PX*>(reinterpret_cast<const char*>(s->data)+static_cast<std::ptrdiff_t>(y)*s->rowbytes);auto* dst=input.row(y);
   for(A_long x=0;x<s->width;++x){float a=std::clamp(Unit(row[x].alpha,maxv),0.f,1.f),ia=a>1e-8f?1.f/a:0.f;float r=Decode(Unit(row[x].red,maxv)*ia,st.transfer),g=Decode(Unit(row[x].green,maxv)*ia,st.transfer),b=Decode(Unit(row[x].blue,maxv)*ia,st.transfer);dst[x]={r*a,g*a,b*a,a};}}
@@ -104,7 +108,10 @@ PF_Err Smart(PF_InData* in,PF_OutData* out,PF_SmartRenderExtra* e){
  }else{
   AEFX_SuiteScoper<PF_WorldSuite2> worldSuite(in,kPFWorldSuite,kPFWorldSuiteVersion2,out);
   PF_PixelFormat format=PF_PixelFormat_INVALID;
+  PF_PixelFormat outputFormat=PF_PixelFormat_INVALID;
   err=worldSuite->PF_GetPixelFormat(src,&format);
+  if(err==PF_Err_NONE)err=worldSuite->PF_GetPixelFormat(dst,&outputFormat);
+  if(err==PF_Err_NONE&&format!=outputFormat)err=PF_Err_UNRECOGNIZED_PARAM_TYPE;
   if(err==PF_Err_NONE){
    xao::RenderContext context;
    context.timeSeconds=in->time_scale?in->current_time/static_cast<double>(in->time_scale):0.0;
@@ -122,5 +129,5 @@ PF_Err Smart(PF_InData* in,PF_OutData* out,PF_SmartRenderExtra* e){
  return err!=PF_Err_NONE?err:checkin;
 }
 }
-extern "C" DllExport PF_Err PluginDataEntryFunction2(void* pica_basicP,PF_PluginDataCB2 pica_add_piPL,SPBasicSuite* pica_basic_suite,const char* host_name,const char* host_version){(void)pica_basicP;(void)pica_add_piPL;(void)pica_basic_suite;(void)host_name;(void)host_version;return PF_Err_NONE;}
+extern "C" DllExport PF_Err PluginDataEntryFunction2(void* pica_basicP,void* pica_add_piPL,void* pica_basic_suite,const char* host_name,const char* host_version){(void)pica_basicP;(void)pica_add_piPL;(void)pica_basic_suite;(void)host_name;(void)host_version;return PF_Err_NONE;}
 extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,PF_InData* in_data,PF_OutData* out_data,PF_ParamDef*[],PF_LayerDef*,void* extra){try{switch(cmd){case PF_Cmd_ABOUT:PF_SPRINTF(out_data->return_msg,"XAO ASCII 1.0\rNative CPU ASCII renderer");return PF_Err_NONE;case PF_Cmd_GLOBAL_SETUP:return Global(out_data);case PF_Cmd_PARAMS_SETUP:return Params(in_data,out_data);case PF_Cmd_SMART_PRE_RENDER:return Pre(in_data,out_data,static_cast<PF_PreRenderExtra*>(extra));case PF_Cmd_SMART_RENDER:return Smart(in_data,out_data,static_cast<PF_SmartRenderExtra*>(extra));default:return PF_Err_NONE;}}catch(const std::bad_alloc&){return PF_Err_OUT_OF_MEMORY;}catch(...){return PF_Err_INTERNAL_STRUCT_DAMAGED;}}
