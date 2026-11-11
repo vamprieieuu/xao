@@ -70,5 +70,8 @@ int main(){
  xao::AsciiParams wideParams;wideParams.randomWords=true;wideParams.randomCharacters=false;wideParams.colorize=false;wideParams.cellSize=8;wideParams.wordSize=100;wideParams.atlas=wideAtlas;
  xao::Image wideSource(48,8),wideOutput(48,8);for(auto& px:wideSource.pixels())px={0,0,0,1};xao::AsciiEngine wideEngine(wideParams);wideEngine.render(wideSource,wideOutput,{});
  int wideInk=0;for(const auto& px:wideOutput.pixels())if(px.a>0.5f)++wideInk;if(wideInk<=64)return fail("word token spans multiple cells");
+ xao::AsciiParams paletteParams;paletteParams.colorize=false;paletteParams.paletteIndex=(std::uint8_t)xao::S1PaletteId::GameBoyDMG;paletteParams.paletteStrength=100.0f;
+ xao::Image paletteSource(8,8),paletteOut(8,8);for(auto& px:paletteSource.pixels())px={0.5f,0.5f,0.5f,1};xao::AsciiEngine paletteEngine(paletteParams);paletteEngine.render(paletteSource,paletteOut,{});
+ bool paletteColor=false;for(const auto& px:paletteOut.pixels())paletteColor|=std::fabs(px.r-px.g)>0.02f||std::fabs(px.g-px.b)>0.02f;if(!paletteColor)return fail("palette selection applies chromatic gradient");
  std::cout<<"XAO ASCII engine tests passed\n";return 0;
 }

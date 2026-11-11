@@ -31,7 +31,7 @@ enum {
  P_GLOW_ENABLE,P_GLOW_SELECTION,P_GLOW_FILTER,P_GLOW_AMOUNT,P_GLOW_RADIUS,P_GLOW_INTENSITY,P_GLOW_X,P_GLOW_Y,P_GLOW_REGION,
  P_RAYS_ENABLE,P_RAYS_COUNT,P_RAYS_ANGLE,P_RAYS_SPREAD,P_RAYS_LENGTH,P_RAYS_INTENSITY,P_RAYS_SHARPNESS,P_RAYS_X,P_RAYS_Y,
  P_OVERRIDE_PRESET,P_INVERT_THRESHOLD,P_SMOOTH_SHADING,P_BLEND_ORIGINAL,P_RANDOM_COLOR_AMOUNT,P_X_FLIP_THRESHOLD,P_PRESERVE_ALPHA,
- P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_VISUAL_STYLE,P_THRESHOLD_LEVEL,P_THRESHOLD_WIDTH,P_THRESHOLD_SPACING,P_WORD_SIZE,P_TINT_COLOR,P_PAPER_COLOR,P_GLOW_COLOR,P_RAYS_COLOR,P_COUNT
+ P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_VISUAL_STYLE,P_THRESHOLD_LEVEL,P_THRESHOLD_WIDTH,P_THRESHOLD_SPACING,P_WORD_SIZE,P_TINT_COLOR,P_PAPER_COLOR,P_GLOW_COLOR,P_RAYS_COLOR,P_PALETTE,P_PALETTE_STRENGTH,P_COUNT
 };
 enum { T_LINEAR=1,T_REC709=2,T_SRGB=3 };
 struct State { xao::AsciiParams ascii; A_long transfer=T_LINEAR; };
@@ -103,6 +103,8 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_POPUPX("Glyph Mapping",4,1,"Auto|Shape Match|Luminance Ramp|Edge Directional",0,P_MAPPING_MODE);
  PF_ADD_FLOAT_SLIDERX("Gamma",0.1,4.0,0.1,4.0,2.2,PF_Precision_TENTHS,0,0,P_GAMMA);
  PF_ADD_POPUPX("Characters Based On",4,1,"Luma|Red|Green|Blue",0,P_CHANNEL_MODE);
+ PF_ADD_POPUPX("Color Palette",10,1,"None|Monitor Glow|Game Boy DMG|Oil 6|Retrotronic|Gothic Bit|Curiosities|CGA Palette 1|CGA Palette 1 Bright|CGA Palette 0 Bright",0,P_PALETTE);
+ PF_ADD_FLOAT_SLIDERX("Palette Strength",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_PALETTE_STRENGTH);
  PF_ADD_FLOAT_SLIDERX("Edge Threshold",0,1,0,1,0.15,PF_Precision_TENTHS,0,0,P_EDGE_THRESHOLD);
  PF_ADD_CHECKBOXX("Selective Glow",0,0,P_GLOW_ENABLE);
  PF_ADD_POPUPX("Glow Selection",4,1,"Random Glyphs|Fixed Region|Random in Region|All Glyphs",0,P_GLOW_SELECTION);
@@ -192,6 +194,8 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_MAPPING_MODE,[&](PF_ParamDef& p){state->ascii.mappingMode=(xao::AsciiMappingMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
  read(P_GAMMA,[&](PF_ParamDef& p){state->ascii.gamma=(float)p.u.fs_d.value;});
  read(P_CHANNEL_MODE,[&](PF_ParamDef& p){state->ascii.channelMode=(xao::AsciiChannelMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
+ read(P_PALETTE,[&](PF_ParamDef& p){state->ascii.paletteIndex=(std::uint8_t)std::clamp<A_long>(p.u.pd.value-1,0,9);});
+ read(P_PALETTE_STRENGTH,[&](PF_ParamDef& p){state->ascii.paletteStrength=(float)p.u.fs_d.value;});
  read(P_EDGE_THRESHOLD,[&](PF_ParamDef& p){state->ascii.edgeThreshold=(float)p.u.fs_d.value;});
  read(P_GLOW_ENABLE,[&](PF_ParamDef& p){state->ascii.glowEnabled=p.u.bd.value!=0;});
  read(P_GLOW_SELECTION,[&](PF_ParamDef& p){state->ascii.glowSelection=(xao::AsciiGlowSelection)std::clamp<A_long>(p.u.pd.value-1,0,3);});
