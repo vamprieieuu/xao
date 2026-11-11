@@ -17,7 +17,7 @@
 #include <vector>
 namespace xao::win32 {
 namespace {
-constexpr int kAtlasW=96,kAtlasH=28;
+constexpr int kAtlasW=256,kAtlasH=96;
 struct Token { std::wstring text; char32_t codepoint=0; bool word=false,number=false,rtl=false,family=false; int fontResource=0; float sizeScale=1.0f; };
 std::wstring toWide(char32_t cp){std::wstring s;if(cp<=0xFFFF)s.push_back((wchar_t)cp);else{cp-=0x10000;s.push_back((wchar_t)(0xD800+(cp>>10)));s.push_back((wchar_t)(0xDC00+(cp&0x3FF)));}return s;}
 bool isNumber(char32_t cp){return(cp>=U'0'&&cp<=U'9')||(cp>=0x0660&&cp<=0x0669)||(cp>=0x06F0&&cp<=0x06F9)||(cp>=0x2160&&cp<=0x2188);}
@@ -57,7 +57,7 @@ void addRange(std::vector<Token>& out,std::set<std::wstring>& seen,char32_t firs
 void addText(std::vector<Token>& out,std::set<std::wstring>& seen,std::u32string_view text,int font,float scale=1.0f,bool family=false){for(char32_t cp:text)addCodepoint(out,seen,cp,font,false,scale,family);}
 void addWords(std::vector<Token>& out,const std::u32string& alphabet,std::uint32_t seed,int font,bool rtl,float scale,bool family=true){if(alphabet.empty())return;std::mt19937 rng(seed);std::uniform_int_distribution<int> len(3,7);std::uniform_int_distribution<std::size_t> pick(0,alphabet.size()-1);for(int n=0;n<72;++n){std::wstring word;int count=len(rng);for(int i=0;i<count;++i){word+=toWide(alphabet[pick(rng)]);if(rtl&&(rng()%5u)==0u)word+=toWide((char32_t)(0x064B+(rng()%15u)));}out.push_back({std::move(word),0,true,false,rtl,family,font,scale});}}
 HRESULT drawText(HDC dc,const Token& token){if(token.text.empty())return E_INVALIDARG;SCRIPT_STRING_ANALYSIS analysis=nullptr;DWORD flags=SSA_GLYPHS|SSA_FALLBACK|SSA_LINK;if(token.rtl)flags|=SSA_RTL;HRESULT hr=ScriptStringAnalyse(dc,token.text.c_str(),(int)token.text.size(),0,-1,flags,kAtlasW,nullptr,nullptr,nullptr,nullptr,nullptr,&analysis);if(FAILED(hr))return hr;const SIZE* extent=ScriptString_pSize(analysis);int x=extent?std::max(0,(kAtlasW-(int)extent->cx)/2):0;int y=extent?std::max(0,(kAtlasH-(int)extent->cy)/2):0;hr=ScriptStringOut(analysis,x,y,0,nullptr,0,-1,FALSE);ScriptStringFree(&analysis);return hr;}
-std::wstring makeKey(const AsciiParams& p){const bool ancient=p.ancientLetters||p.ancientNumbers||p.ancientWords,english=p.englishLetters||p.englishNumbers||p.englishWords,arabic=p.arabicLetters||p.arabicNumbers||p.arabicWords;const int cs=(p.randomWords||(p.characterSet>=AsciiCharacterSetId::S1Braille&&p.characterSet<=AsciiCharacterSetId::S1BoxDrawing))?(int)p.characterSet:-1;std::wstring k=std::to_wstring(cs)+L"|"+std::to_wstring(p.ancientFont)+L"|"+std::to_wstring(english?p.englishFont:0)+L"|"+std::to_wstring(arabic?p.arabicFont:0)+L"|"+std::to_wstring((p.randomWords||p.ancientWords||p.englishWords||p.arabicWords)?p.randomSeed:0)+L"|"+std::to_wstring(arabic&&p.arabicNumbers?p.arabicNumberStyle:0);const bool f[]={p.randomWords,p.ancientLetters,p.ancientNumbers,p.ancientWords,p.englishLetters,p.englishNumbers,p.englishWords,p.arabicLetters,p.arabicNumbers,p.arabicWords,p.useAncientSize,p.useEnglishSize,p.useArabicSize};for(bool v:f)k+=v?L"1":L"0";k+=L"|"+std::to_wstring((int)std::lround(p.ancientSize))+L"|"+std::to_wstring((int)std::lround(p.englishSize))+L"|"+std::to_wstring((int)std::lround(p.arabicSize));return k;}
+std::wstring makeKey(const AsciiParams& p){const bool ancient=p.ancientLetters||p.ancientNumbers||p.ancientWords,english=p.englishLetters||p.englishNumbers||p.englishWords,arabic=p.arabicLetters||p.arabicNumbers||p.arabicWords;const int cs=(p.randomWords||(p.characterSet>=AsciiCharacterSetId::S1Braille&&p.characterSet<=AsciiCharacterSetId::S1BoxDrawing))?(int)p.characterSet:-1;std::wstring k=std::to_wstring(cs)+L"|preset:"+std::to_wstring((int)p.preset)+L"|style:"+std::to_wstring((int)p.visualStyle)+L"|"+std::to_wstring(p.ancientFont)+L"|"+std::to_wstring(english?p.englishFont:0)+L"|"+std::to_wstring(arabic?p.arabicFont:0)+L"|"+std::to_wstring((p.randomWords||p.ancientWords||p.englishWords||p.arabicWords)?p.randomSeed:0)+L"|"+std::to_wstring(arabic&&p.arabicNumbers?p.arabicNumberStyle:0);const bool f[]={p.randomWords,p.ancientLetters,p.ancientNumbers,p.ancientWords,p.englishLetters,p.englishNumbers,p.englishWords,p.arabicLetters,p.arabicNumbers,p.arabicWords,p.useAncientSize,p.useEnglishSize,p.useArabicSize};for(bool v:f)k+=v?L"1":L"0";k+=L"|"+std::to_wstring((int)std::lround(p.ancientSize))+L"|"+std::to_wstring((int)std::lround(p.englishSize))+L"|"+std::to_wstring((int)std::lround(p.arabicSize));return k;}
 std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  std::vector<Token> tokens;std::set<std::wstring> seen;
  const int ancientFont=resourceFor(0,p.ancientFont),englishFont=resourceFor(1,p.englishFont),arabicFont=resourceFor(2,p.arabicFont);
@@ -66,16 +66,27 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  const float arabicScale=p.useArabicSize?std::clamp(p.arabicSize/100.0f,.1f,3.0f):1.0f;
  int presetFont=0;
  switch(p.preset){
-  case AsciiPresetId::AlienSignal:case AsciiPresetId::Corrupted:case AsciiPresetId::Diamonds:case AsciiPresetId::Motherboard:presetFont=ancientFont;break;
-  case AsciiPresetId::Classic:case AsciiPresetId::Crossword:case AsciiPresetId::Matrix:case AsciiPresetId::PinkShapes:presetFont=englishFont;break;
+  case AsciiPresetId::AlienSignal:case AsciiPresetId::Diamonds:presetFont=resourceFor(0,1);break;
+  case AsciiPresetId::Corrupted:case AsciiPresetId::Motherboard:presetFont=resourceFor(0,4);break;
+  case AsciiPresetId::Classic:presetFont=resourceFor(1,1);break;
+  case AsciiPresetId::Crossword:presetFont=resourceFor(1,5);break;
+  case AsciiPresetId::Matrix:presetFont=resourceFor(1,10);break;
+  case AsciiPresetId::PinkShapes:presetFont=resourceFor(1,5);break;
   default:break;
  }
  switch(p.visualStyle){
-  case AsciiVisualStyle::CGO:case AsciiVisualStyle::Liquid:case AsciiVisualStyle::Glitch:presetFont=ancientFont;break;
-  case AsciiVisualStyle::Ghost:case AsciiVisualStyle::Mosaic:case AsciiVisualStyle::Rainbow:case AsciiVisualStyle::Geometric:presetFont=englishFont;break;
+  case AsciiVisualStyle::CGO:presetFont=resourceFor(0,2);break;
+  case AsciiVisualStyle::Liquid:presetFont=0;break;
+  case AsciiVisualStyle::Glitch:presetFont=resourceFor(1,10);break;
+  case AsciiVisualStyle::Alien:presetFont=resourceFor(0,1);break;
+  case AsciiVisualStyle::Ghost:presetFont=resourceFor(0,3);break;
+  case AsciiVisualStyle::Mosaic:presetFont=resourceFor(1,6);break;
+  case AsciiVisualStyle::Rainbow:presetFont=resourceFor(1,10);break;
+  case AsciiVisualStyle::Geometric:presetFont=0;break;
   default:break;
  }
  for(int id=0;id<=18;++id){const int font=(id==13||id==3)?ancientFont:presetFont;addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),font);}
+ addText(tokens,seen,asciiCharacterSetCodepoints(AsciiCharacterSetId::CratesCircleDots),presetFont);
  for(int id=24;id<=26;++id)addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),presetFont);
  switch(p.characterSet){case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF,0);break;case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6,0);break;case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F,0);break;case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F,0);break;case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F,0);break;default:break;}
  const std::u32string ancient=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψωᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
@@ -103,7 +114,7 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
   std::wstring preferred=fontFace(token.fontResource);HFONT chosen=nullptr;HGDIOBJ oldFont=nullptr;bool found=false;
   const bool japanese=token.codepoint>=0x3040&&token.codepoint<=0x30FF;
   std::array<std::wstring,7> faces=japanese?std::array<std::wstring,7>{L"Yu Gothic UI",L"Meiryo",preferred,fallback[0],fallback[1],fallback[2],fallback[3]}:std::array<std::wstring,7>{preferred,fallback[0],fallback[1],fallback[2],fallback[3],L"Yu Gothic UI",L"Meiryo"};
-  for(const auto& face:faces){HFONT f=CreateFontW(token.word?-12:-20,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_TT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH|FF_DONTCARE,face.c_str());if(!f)continue;HGDIOBJ prior=SelectObject(dc,f);if(hasGlyph(dc,token.text)){chosen=f;oldFont=prior;found=true;break;}SelectObject(dc,prior);DeleteObject(f);}
+  for(const auto& face:faces){HFONT f=CreateFontW(token.word?-54:-72,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,token.rtl?ARABIC_CHARSET:DEFAULT_CHARSET,OUT_TT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH|FF_DONTCARE,face.c_str());if(!f)continue;HGDIOBJ prior=SelectObject(dc,f);if(hasGlyph(dc,token.text)){chosen=f;oldFont=prior;found=true;break;}SelectObject(dc,prior);DeleteObject(f);}
   if(!found)continue;std::memset(bits,0,kAtlasW*kAtlasH*4);if(FAILED(drawText(dc,token))){SelectObject(dc,oldFont);DeleteObject(chosen);continue;}
   GlyphBitmap g;g.codepoint=token.codepoint;g.wordToken=token.word;g.numberToken=token.number;g.familyToken=token.family;g.sizeScale=token.sizeScale;g.width=kAtlasW;g.height=kAtlasH;g.coverage.resize(kAtlasW*kAtlasH);const auto* px=(const std::uint8_t*)bits;std::uint64_t sum=0;
   for(int i=0;i<kAtlasW*kAtlasH;++i){auto v=px[i*4+2];g.coverage[(std::size_t)i]=v;sum+=v;}
@@ -121,7 +132,7 @@ std::shared_ptr<const GlyphAtlas> buildGlyphAtlas(const AsciiParams& params){
  static std::mutex mutex;static std::unordered_map<std::wstring,std::shared_ptr<const GlyphAtlas>> cache;const auto key=makeKey(params);
  {std::lock_guard<std::mutex> lock(mutex);auto it=cache.find(key);if(it!=cache.end())return it->second;}
  auto result=build(params);
- {std::lock_guard<std::mutex> lock(mutex);auto it=cache.find(key);if(it!=cache.end())return it->second;if(cache.size()>=48)cache.erase(cache.begin());cache.emplace(key,result);}
+ {std::lock_guard<std::mutex> lock(mutex);auto it=cache.find(key);if(it!=cache.end())return it->second;if(cache.size()>=16)cache.erase(cache.begin());cache.emplace(key,result);}
  return result;
 }
 } // namespace xao::win32
