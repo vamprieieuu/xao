@@ -32,7 +32,8 @@ constexpr char32_t k9[]=U"<>^v";
 constexpr char32_t k10[]=U".:;,+";
 constexpr char32_t k11[]=U"[]{}<>+-|_/";
 constexpr char32_t k12[]=U"[]{}<>+-|_=:/\\";
-constexpr char32_t k13[]=U"ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
+constexpr char32_t k13[]=U"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&!?+-=<>[]{}";
+constexpr char32_t k15[]=U"●○◉◎◌◍◦•∙·°∘.:;,+*";
 constexpr char32_t k14[]=U"|/\\-_=.";
 constexpr char32_t kS1AtlasChars[]=U" \u0060.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@";
 constexpr char32_t kS1Blocks[]=U" \u2591\u2592\u2593\u2588";
@@ -86,24 +87,25 @@ Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
 }
 const CratesPresetDefinition& cratesPreset(AsciiPresetId id) noexcept{auto i=(std::size_t)id;return kPresets[i<sizeof(kPresets)/sizeof(kPresets[0])?i:0];}
 std::string_view asciiCharacterSetName(AsciiCharacterSetId id) noexcept{
- static constexpr std::array<std::string_view,27> names{{"Fantasy Marks","Vampire Numerals","Typewriter","Neo Tokyo","Binary Code","Punk Minimal","Cross Marks","Bubble Forms","Starfield","Diamond Signs","Dot Matrix","Circuit Lines I","Circuit Lines II","Alien Glyphs","Signal Bars","Classic Ramp","Minimal Ramp","Detailed Ramp","Bourke Ramp","Braille","Katakana","Block Mosaic","Quadrants","Box Drawing","ASCII Standard","ASCII Simple","ASCII Detailed"}};
+ static constexpr std::array<std::string_view,28> names{{"Fantasy Marks","Vampire Numerals","Typewriter","Neo Tokyo","Binary Code","Punk Minimal","Cross Marks","Bubble Forms","Starfield","Diamond Signs","Dot Matrix","Circuit Lines I","Circuit Lines II","Alien Glyphs","Signal Bars","Classic Ramp","Minimal Ramp","Detailed Ramp","Bourke Ramp","Braille","Katakana","Block Mosaic","Quadrants","Box Drawing","ASCII Standard","ASCII Simple","ASCII Detailed","Circles & Dots"}};
  auto i=(std::size_t)id;return i<names.size()?names[i]:names[0];
 }
 std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept{
  switch(id){
- case AsciiCharacterSetId::CratesSpecialLetters:return k0;case AsciiCharacterSetId::CratesSpecialNumbers:return k1;case AsciiCharacterSetId::CratesTypewriter:return k2;case AsciiCharacterSetId::CratesJapanese:return k3;case AsciiCharacterSetId::CratesBinary:return k4;case AsciiCharacterSetId::CratesMinimalPunk:return k5;case AsciiCharacterSetId::CratesXs:return k6;case AsciiCharacterSetId::CratesBubbleGrowth:return k7;case AsciiCharacterSetId::CratesStars:return k8;case AsciiCharacterSetId::CratesDiamonds:return k9;case AsciiCharacterSetId::CratesDots:return k10;case AsciiCharacterSetId::CratesCircuits1:return k11;case AsciiCharacterSetId::CratesCircuits2:return k12;case AsciiCharacterSetId::CratesAlienFont:return k13;case AsciiCharacterSetId::CratesBars:return k14;case AsciiCharacterSetId::S1Classic:return kS1AtlasChars;case AsciiCharacterSetId::S1Minimal:return kS1AtlasChars;case AsciiCharacterSetId::S1Detailed:return kS1AtlasChars;case AsciiCharacterSetId::S1Bourke:return kS1AtlasChars;case AsciiCharacterSetId::S1Blocks:return kS1Blocks;case AsciiCharacterSetId::S1Quadrants:return kS1Quadrants;case AsciiCharacterSetId::S1BoxDrawing:return kS1BoxDrawing;case AsciiCharacterSetId::AsciiArtMainStandard:return kAsciiArtMainStandard;case AsciiCharacterSetId::AsciiArtMainSimple:return kAsciiArtMainSimple;case AsciiCharacterSetId::AsciiArtMainDetailed:return kAsciiArtMainDetailed;default:return kEmpty;
+ case AsciiCharacterSetId::CratesSpecialLetters:return k0;case AsciiCharacterSetId::CratesSpecialNumbers:return k1;case AsciiCharacterSetId::CratesTypewriter:return k2;case AsciiCharacterSetId::CratesJapanese:return k3;case AsciiCharacterSetId::CratesBinary:return k4;case AsciiCharacterSetId::CratesMinimalPunk:return k5;case AsciiCharacterSetId::CratesXs:return k6;case AsciiCharacterSetId::CratesBubbleGrowth:return k7;case AsciiCharacterSetId::CratesStars:return k8;case AsciiCharacterSetId::CratesDiamonds:return k9;case AsciiCharacterSetId::CratesDots:return k10;case AsciiCharacterSetId::CratesCircuits1:return k11;case AsciiCharacterSetId::CratesCircuits2:return k12;case AsciiCharacterSetId::CratesAlienFont:return k13;case AsciiCharacterSetId::CratesBars:return k14;case AsciiCharacterSetId::CratesCircleDots:return k15;case AsciiCharacterSetId::S1Classic:return kS1AtlasChars;case AsciiCharacterSetId::S1Minimal:return kS1AtlasChars;case AsciiCharacterSetId::S1Detailed:return kS1AtlasChars;case AsciiCharacterSetId::S1Bourke:return kS1AtlasChars;case AsciiCharacterSetId::S1Blocks:return kS1Blocks;case AsciiCharacterSetId::S1Quadrants:return kS1Quadrants;case AsciiCharacterSetId::S1BoxDrawing:return kS1BoxDrawing;case AsciiCharacterSetId::AsciiArtMainStandard:return kAsciiArtMainStandard;case AsciiCharacterSetId::AsciiArtMainSimple:return kAsciiArtMainSimple;case AsciiCharacterSetId::AsciiArtMainDetailed:return kAsciiArtMainDetailed;default:return kEmpty;
  }
 }
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas(){static const auto a=makeBuiltin();return a;}
 void applyCratesPreset(AsciiParams& p,AsciiPresetId id) noexcept{
- const auto& v=cratesPreset(id);p.preset=id;p.presetCharacterSize=(id==AsciiPresetId::Default?90.0f:v.characterSize);p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=true;p.randomWords=true;p.randomTiming=true;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);if(id==AsciiPresetId::Corrupted){p.visualStyle=AsciiVisualStyle::Glitch;p.characterSet=AsciiCharacterSetId::CratesCircuits2;p.blendWithOriginal=0.0f;p.randomAmount=0.95f;p.randomSpeed=1.5f;}if(id==AsciiPresetId::AlienSignal){p.tintStrength=0.0f;p.tintColor={1,1,1,1};p.characterSet=AsciiCharacterSetId::CratesAlienFont;}if(id==AsciiPresetId::CirclesAndDots){p.characterSet=AsciiCharacterSetId::CratesBubbleGrowth;p.presetCharacterSize=70.0f;p.characterMargin=12.0f;p.cellMargin=2.0f;}
+ const auto& v=cratesPreset(id);p.preset=id;p.presetCharacterSize=(id==AsciiPresetId::Default?90.0f:v.characterSize);p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=true;p.randomWords=true;p.randomTiming=true;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);if(id==AsciiPresetId::Corrupted){p.visualStyle=AsciiVisualStyle::Glitch;p.characterSet=AsciiCharacterSetId::CratesCircuits2;p.blendWithOriginal=0.0f;p.randomAmount=0.95f;p.randomSpeed=1.5f;}if(id==AsciiPresetId::AlienSignal){p.visualStyle=AsciiVisualStyle::Alien;p.tintStrength=35.0f;p.tintColor={0.20f,1.0f,0.36f,1};p.randomColorAmount=82.0f;p.characterSet=AsciiCharacterSetId::CratesAlienFont;p.presetCharacterSize=82.0f;p.randomCharacters=true;p.randomWords=true;p.randomSpeed=3.0f;}if(id==AsciiPresetId::CirclesAndDots){p.characterSet=AsciiCharacterSetId::CratesCircleDots;p.presetCharacterSize=82.0f;p.characterMargin=4.0f;p.cellMargin=0.0f;p.tintStrength=18.0f;p.randomColorAmount=45.0f;}
 }
 void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) const{
  if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
  if(src.empty())return;
  dst=src;
- int w=src.width(),h=src.height();const int cells=std::clamp(params_.cellSize,2,512);int cell=std::clamp((int)std::lround(96.0f/(float)cells),2,48);
- if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
+ int w=src.width(),h=src.height();int cell=std::clamp(params_.cellSize,2,512);
+ if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,(int)std::lround(cell*0.55f));
+ if(params_.visualStyle==AsciiVisualStyle::Liquid)cell=std::max(4,(int)std::lround(cell*0.5f));
  float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);const float glyphOpacity=clamp01(params_.asciiStrength/100.0f)*clamp01(params_.asciiAmount/100.0f);if(glyphOpacity<=1.0e-6f)return;
  float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f)*clampf(params_.presetCharacterSize/100.0f,.1f,3.0f);
  if(params_.visualStyle==AsciiVisualStyle::Micro)glyphScale*=0.68f;
@@ -123,7 +125,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   int rowHeight=cell;
   if(params_.visualStyle==AsciiVisualStyle::Organic){const std::uint32_t organic=hash32(params_.randomSeed^(std::uint32_t)rowIndex*0xA511E9B3u);rowHeight=std::max(2,(int)std::lround(cell*(0.82f+0.36f*(float)organic/(float)0xFFFFFFFFu)));}
   if(params_.layoutMode==AsciiLayoutMode::LiquidPanels||params_.visualStyle==AsciiVisualStyle::Liquid){
-   const int minH=std::clamp(std::min(params_.panelMinHeight,params_.panelMaxHeight),1,8),maxH=std::clamp(std::max(params_.panelMinHeight,params_.panelMaxHeight),1,8);
+   const int minH=std::clamp(std::min(params_.panelMinHeight,params_.panelMaxHeight),1,3),maxH=std::clamp(std::max(params_.panelMinHeight,params_.panelMaxHeight),1,3);
    rowHeight=cell*(minH+(int)(hash32(params_.randomSeed^(std::uint32_t)rowIndex*0x9E3779B9u)%(std::uint32_t)(maxH-minH+1)));
   }
   const int y1=std::min(h,y0+rowHeight);
@@ -131,7 +133,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    int colWidth=cell;
    if(params_.visualStyle==AsciiVisualStyle::Organic){const std::uint32_t organic=hash32(params_.randomSeed^(std::uint32_t)rowIndex*0x85EBCA6Bu^(std::uint32_t)colIndex*0xC2B2AE35u);colWidth=std::max(2,(int)std::lround(cell*(0.78f+0.44f*(float)organic/(float)0xFFFFFFFFu)));}
    if(params_.layoutMode==AsciiLayoutMode::LiquidPanels||params_.visualStyle==AsciiVisualStyle::Liquid){
-    const int minW=std::clamp(std::min(params_.panelMinWidth,params_.panelMaxWidth),1,8),maxW=std::clamp(std::max(params_.panelMinWidth,params_.panelMaxWidth),1,8);
+    const int minW=std::clamp(std::min(params_.panelMinWidth,params_.panelMaxWidth),2,5),maxW=std::clamp(std::max(params_.panelMinWidth,params_.panelMaxWidth),2,5);
     const std::uint32_t panelSeed=params_.randomSeed^((std::uint32_t)rowIndex*0x85EBCA6Bu)^((std::uint32_t)colIndex*0xC2B2AE35u);
     colWidth=cell*(minW+(int)(hash32(panelSeed)%(std::uint32_t)(maxW-minW+1)));
    }
@@ -168,7 +170,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
     for(const auto* candidate:candidates)if(candidate->codepoint==direction){glyph=candidate;break;}
    }
   }
-  if(!glyph)glyph=selectGlyph(candidates,target,shapeMatch,(params_.randomCharacters||params_.randomWords)?params_.randomAmount:0,rv);
+  if(!glyph){if(params_.randomCharacters){glyph=candidates[(std::size_t)rv%candidates.size()];}else glyph=selectGlyph(candidates,target,shapeMatch,params_.randomWords?params_.randomAmount:0,rv);}
   if(params_.visualStyle==AsciiVisualStyle::Geometric){for(const auto* candidate:candidates){const char32_t cp=candidate->codepoint;if(cp==43||cp==42||cp==47||cp==92||cp==124||cp==60||cp==62||cp==94||cp==118||cp==91||cp==93||cp==123||cp==125||cp==40||cp==41||cp==35||cp==61||cp==45||cp==95||cp==46){glyph=candidate;break;}}}
   if(!glyph)continue;
   float cw=(float)(x1-x0),ch=(float)(y1-y0),aw=cw*(1-cellMargin),ah=ch*(1-cellMargin);
@@ -192,13 +194,14 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   Pixel fg=(params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)?avg:params_.ink;if((params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   if(params_.visualStyle==AsciiVisualStyle::Glitch){const float glitch=(float)((rv>>16)&255u)/255.0f;const float flicker=0.72f+0.28f*std::fabs(std::sin((float)time*18.0f+glitch*6.28318f));fg.r=clamp01(fg.r*(0.65f+glitch*0.9f));fg.g=clamp01(fg.g*(0.7f+(1.0f-glitch)*0.7f));fg.b=clamp01(fg.b*(0.75f+glitch*0.8f));fg=scaled(fg,flicker);}
-  if(params_.visualStyle==AsciiVisualStyle::CGO){const float accent=(float)(rv&255u)/255.0f;if(accent>0.78f){fg.r=std::max(fg.r,0.78f);fg.g=std::max(fg.g,0.16f+0.22f*accent);fg.b*=0.35f;}}
+  if(params_.visualStyle==AsciiVisualStyle::CGO){const float accent=(float)(rv&255u)/255.0f;const float warm=(float)((rv>>8)&255u)/255.0f;fg.r=fg.r*0.28f+(0.36f+0.64f*warm)*0.72f;fg.g=fg.g*0.22f+(0.08f+0.34f*warm)*0.78f;fg.b=fg.b*0.28f+0.18f*0.72f;if(accent>0.68f){fg.r=1.0f;fg.g=0.36f+0.35f*warm;fg.b=0.16f;}}
+  if(params_.visualStyle==AsciiVisualStyle::Alien){const float v=(float)(rv&255u)/255.0f;const int band=(int)((rv>>8)%4u);const Pixel alien[4]={{0.20f,1.0f,0.30f,1},{0.0f,0.92f,0.82f,1},{0.58f,1.0f,0.08f,1},{0.28f,0.55f,1.0f,1}};const Pixel c=alien[band];const float pulse=0.72f+0.28f*std::fabs(std::sin((float)time*8.0f+v*6.28318f));fg.r=(fg.r*0.22f+c.r*0.78f)*pulse;fg.g=(fg.g*0.22f+c.g*0.78f)*pulse;fg.b=(fg.b*0.22f+c.b*0.78f)*pulse;}
   if(params_.visualStyle==AsciiVisualStyle::Rainbow){
    const std::uint32_t patch=hash32(params_.randomSeed^(std::uint32_t)(x0/std::max(1,cell*4))*0x9E3779B9u^(std::uint32_t)(y0/std::max(1,cell*4))*0x85EBCA6Bu);const float hue=std::fmod((float)(patch&0xFFFFu)/65535.0f*0.72f+(float)time*0.035f+mean*0.08f,1.0f)*6.0f;
    const float chroma=0.28f+0.72f*clamp01(mean),xh=chroma*(1.0f-std::fabs(std::fmod(hue,2.0f)-1.0f));
    float rr=0,gg=0,bb=0;
    if(hue<1){rr=chroma;gg=xh;}else if(hue<2){rr=xh;gg=chroma;}else if(hue<3){gg=chroma;bb=xh;}else if(hue<4){gg=xh;bb=chroma;}else if(hue<5){rr=xh;bb=chroma;}else{rr=chroma;bb=xh;}
-   fg.r=fg.r*0.72f+(rr+0.12f)*0.28f;fg.g=fg.g*0.72f+(gg+0.12f)*0.28f;fg.b=fg.b*0.72f+(bb+0.12f)*0.28f;fg.a=1.0f;
+   const float sourceLuma=clamp01(mean);const float neon=0.35f+0.65f*sourceLuma;fg.r=clamp01((rr+0.06f)*neon+fg.r*0.18f);fg.g=clamp01((gg+0.06f)*neon+fg.g*0.18f);fg.b=clamp01((bb+0.06f)*neon+fg.b*0.18f);fg.a=1.0f;
   }
   if(params_.paletteIndex>0&&params_.paletteIndex<=kS1PaletteCount){
    const auto* palette=s1Palette((S1PaletteId)params_.paletteIndex);
@@ -210,7 +213,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
     const float blend=position-(float)lo;
     auto channel=[&](std::uint8_t ca,std::uint8_t cb){return srgbToLinear(((float)ca*(1.0f-blend)+(float)cb*blend)/255.0f);};
     const Pixel color{channel(palette->colors[lo].r,palette->colors[hi].r),channel(palette->colors[lo].g,palette->colors[hi].g),channel(palette->colors[lo].b,palette->colors[hi].b),1.0f};
-    const float amount=clamp01(params_.paletteStrength/100.0f);
+    const float amount=clampf(params_.paletteStrength/100.0f,0.0f,1.5f);
     fg.r=fg.r*(1.0f-amount)+color.r*amount;fg.g=fg.g*(1.0f-amount)+color.g*amount;fg.b=fg.b*(1.0f-amount)+color.b*amount;
    }
   }
@@ -219,13 +222,19 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    const Pixel& original=src.row(y)[x];float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;
    float mask=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0.0f;
    Pixel base=original;
+   if(params_.visualStyle==AsciiVisualStyle::CGO)base=scaled(base,0.24f);
+   if(params_.visualStyle==AsciiVisualStyle::Ghost)base=scaled(base,0.34f);
+   if(params_.visualStyle==AsciiVisualStyle::Rainbow)base=scaled(base,0.20f);
+   if(params_.visualStyle==AsciiVisualStyle::Alien)base=scaled(base,0.32f);
+   if(params_.visualStyle==AsciiVisualStyle::Glitch)base=scaled(base,0.28f);
    if(params_.visualStyle==AsciiVisualStyle::Liquid){
     const float radius=std::max(1.0f,std::min(cw,ch)*0.18f),lx=(float)(x-x0)+0.5f,ly=(float)(y-y0)+0.5f;
     const float qx=std::max(radius-lx,std::max(0.0f,lx-(cw-radius))),qy=std::max(radius-ly,std::max(0.0f,ly-(ch-radius)));
     const bool inside=qx*qx+qy*qy<=radius*radius;if(!inside)mask=0.0f;
     if(inside){const float panel=0.92f;Pixel panelColor=avg;float pa=std::max(avg.a,1.0e-6f);panelColor.r=clamp01(panelColor.r/pa);panelColor.g=clamp01(panelColor.g/pa);panelColor.b=clamp01(panelColor.b/pa);base.r=original.r*(1-panel)+panelColor.r*panel;base.g=original.g*(1-panel)+panelColor.g*panel;base.b=original.b*(1-panel)+panelColor.b*panel;}
    }
-   const float opacity=clamp01(mask)*glyphOpacity;
+   float opacity=clamp01(mask)*glyphOpacity;
+   if(params_.visualStyle==AsciiVisualStyle::CGO||params_.visualStyle==AsciiVisualStyle::Ghost||params_.visualStyle==AsciiVisualStyle::Rainbow||params_.visualStyle==AsciiVisualStyle::Alien||params_.visualStyle==AsciiVisualStyle::Glitch)opacity=clamp01(opacity*1.35f);
    Pixel ink=fg;
    if(params_.visualStyle==AsciiVisualStyle::Liquid){const float lum=clamp01(.2126f*avg.r+.7152f*avg.g+.0722f*avg.b);const float text=(lum>0.52f)?0.10f:0.96f;ink={text,text,text,1.0f};}
    else {const float lum=clamp01(.2126f*avg.r+.7152f*avg.g+.0722f*avg.b);const float gain=(lum>0.52f)?0.32f:1.55f;ink.r=clamp01(ink.r*gain);ink.g=clamp01(ink.g*gain);ink.b=clamp01(ink.b*gain);}
