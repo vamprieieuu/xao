@@ -62,7 +62,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_POPUPX("Plugin Presets",10,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes",0,P_PRESET);
  PF_ADD_POPUPX("Character Set",28,1,"Use Preset|Crates: Special Characters and Letters|Crates: Special Characters and Numbers|Crates: Classic Typewriter|Crates: Japanese Characters|Crates: Binary|Crates: Minimal Punk|Crates: X's|Crates: Bubble Growth|Crates: Stars|Crates: Diamonds|Crates: Dots|Crates: Circuits 1|Crates: Circuits 2|Crates: Alien Font|Crates: Bars|S1: Classic|S1: Minimal|S1: Detailed|S1: Bourke|S1: Braille|S1: Katakana|S1: Blocks|S1: Quadrants|S1: Box Drawing|ASCII Art Main: Standard|ASCII Art Main: Simple|ASCII Art Main: Detailed",0,P_CHARSET);
- PF_ADD_POPUPX("ASCII Look",7,1,"Standard|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold",0,P_VISUAL_STYLE);
+ PF_ADD_POPUPX("ASCII Look",12,1,"Standard|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch",0,P_VISUAL_STYLE);
  PF_ADD_FLOAT_SLIDERX("Threshold Level",0,100,0,100,48,PF_Precision_INTEGER,0,0,P_THRESHOLD_LEVEL);
  PF_ADD_FLOAT_SLIDERX("Threshold Segment Width",4,128,4,128,24,PF_Precision_INTEGER,0,0,P_THRESHOLD_WIDTH);
  PF_ADD_FLOAT_SLIDERX("Threshold Row Spacing",2,64,2,64,8,PF_Precision_INTEGER,0,0,P_THRESHOLD_SPACING);
@@ -149,7 +149,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_PRESET,[&](PF_ParamDef& p){preset=p.u.pd.value;});
  preset=std::clamp<A_long>(preset,1,10);xao::applyCratesPreset(state->ascii,(xao::AsciiPresetId)(preset-1));
  read(P_CHARSET,[&](PF_ParamDef& p){if(p.u.pd.value>1)state->ascii.characterSet=(xao::AsciiCharacterSetId)std::clamp<A_long>(p.u.pd.value-2,0,(A_long)xao::AsciiCharacterSetId::Count-1);});
- read(P_VISUAL_STYLE,[&](PF_ParamDef& p){state->ascii.visualStyle=(xao::AsciiVisualStyle)std::clamp<A_long>(p.u.pd.value-1,0,6);});
+ read(P_VISUAL_STYLE,[&](PF_ParamDef& p){state->ascii.visualStyle=(xao::AsciiVisualStyle)std::clamp<A_long>(p.u.pd.value-1,0,11);});
  read(P_THRESHOLD_LEVEL,[&](PF_ParamDef& p){state->ascii.thresholdLevel=(float)p.u.fs_d.value/100.0f;});
  read(P_THRESHOLD_WIDTH,[&](PF_ParamDef& p){state->ascii.thresholdSegmentWidth=(int)p.u.fs_d.value;});
  read(P_THRESHOLD_SPACING,[&](PF_ParamDef& p){state->ascii.thresholdRowSpacing=(int)p.u.fs_d.value;});

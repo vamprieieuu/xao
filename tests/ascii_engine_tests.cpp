@@ -73,5 +73,6 @@ int main(){
  xao::AsciiParams paletteParams;paletteParams.colorize=false;paletteParams.paletteIndex=(std::uint8_t)xao::S1PaletteId::GameBoyDMG;paletteParams.paletteStrength=100.0f;
  xao::Image paletteSource(8,8),paletteOut(8,8);for(auto& px:paletteSource.pixels())px={0.5f,0.5f,0.5f,1};xao::AsciiEngine paletteEngine(paletteParams);paletteEngine.render(paletteSource,paletteOut,{});
  bool paletteColor=false;for(const auto& px:paletteOut.pixels())paletteColor|=std::fabs(px.r-px.g)>0.02f||std::fabs(px.g-px.b)>0.02f;if(!paletteColor)return fail("palette selection applies chromatic gradient");
+ for(int style=7;style<=11;++style){xao::AsciiParams styled;styled.visualStyle=(xao::AsciiVisualStyle)style;styled.randomSeed=19;styled.colorize=true;xao::Image styleOut(32,24);xao::AsciiEngine styledEngine(styled);styledEngine.render(liquidSource,styleOut,{});for(const auto& px:styleOut.pixels())if(!std::isfinite(px.r)||!std::isfinite(px.g)||!std::isfinite(px.b)||!std::isfinite(px.a))return fail("additional ASCII styles produce finite output");}
  std::cout<<"XAO ASCII engine tests passed\n";return 0;
 }

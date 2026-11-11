@@ -19,7 +19,7 @@ enum class AsciiChannelMode : std::uint8_t { Luma=0, Red, Green, Blue };
 enum class AsciiGlowSelection : std::uint8_t { Random=0, FixedRegion, RandomInRegion, All };
 enum class AsciiGlowGlyphFilter : std::uint8_t { All=0, Letters, Numbers, Symbols, Words };
 enum class AsciiLayoutMode : std::uint8_t { Grid=0, LiquidPanels };
-enum class AsciiVisualStyle : std::uint8_t { Standard=0, CGO, Ghost, Liquid, Mosaic, Rainbow, Threshold };
+enum class AsciiVisualStyle : std::uint8_t { Standard=0, CGO, Ghost, Liquid, Mosaic, Rainbow, Threshold, Micro, Organic, Photorealistic, Geometric, Glitch };
 struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;

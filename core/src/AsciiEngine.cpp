@@ -121,8 +121,11 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
  if(src.empty())return;
  int w=src.width(),h=src.height(),cell=std::max(2,std::min(256,params_.cellSize));
+ if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
  float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);
  float glyphScale=clampf(params_.glyphScale*(params_.characterSize/88.0f),.1f,1.5f);
+ if(params_.visualStyle==AsciiVisualStyle::Micro)glyphScale*=0.68f;
+ if(params_.visualStyle==AsciiVisualStyle::Photorealistic)glyphScale*=0.92f;
  float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
  const bool styleGlow=params_.visualStyle==AsciiVisualStyle::CGO||params_.visualStyle==AsciiVisualStyle::Mosaic;
  std::vector<float> glowMask,glowTemp;if(params_.glowEnabled||styleGlow){glowMask.assign((std::size_t)w*h,0.0f);glowTemp.resize(glowMask.size());}
@@ -134,6 +137,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  if(candidates.empty())return;
  for(int y0=0,rowIndex=0;y0<h;++rowIndex){
   int rowHeight=cell;
+  if(params_.visualStyle==AsciiVisualStyle::Organic){const std::uint32_t organic=hash32(params_.randomSeed^(std::uint32_t)rowIndex*0xA511E9B3u);rowHeight=std::max(2,(int)std::lround(cell*(0.82f+0.36f*(float)organic/(float)0xFFFFFFFFu)));}
   if(params_.layoutMode==AsciiLayoutMode::LiquidPanels||params_.visualStyle==AsciiVisualStyle::Liquid){
    const int minH=std::clamp(std::min(params_.panelMinHeight,params_.panelMaxHeight),1,8),maxH=std::clamp(std::max(params_.panelMinHeight,params_.panelMaxHeight),1,8);
    rowHeight=cell*(minH+(int)(hash32(params_.randomSeed^(std::uint32_t)rowIndex*0x9E3779B9u)%(std::uint32_t)(maxH-minH+1)));
@@ -141,6 +145,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   const int y1=std::min(h,y0+rowHeight);
   for(int x0=0,colIndex=0;x0<w;++colIndex){
    int colWidth=cell;
+   if(params_.visualStyle==AsciiVisualStyle::Organic){const std::uint32_t organic=hash32(params_.randomSeed^(std::uint32_t)rowIndex*0x85EBCA6Bu^(std::uint32_t)colIndex*0xC2B2AE35u);colWidth=std::max(2,(int)std::lround(cell*(0.78f+0.44f*(float)organic/(float)0xFFFFFFFFu)));}
    if(params_.layoutMode==AsciiLayoutMode::LiquidPanels||params_.visualStyle==AsciiVisualStyle::Liquid){
     const int minW=std::clamp(std::min(params_.panelMinWidth,params_.panelMaxWidth),1,8),maxW=std::clamp(std::max(params_.panelMinWidth,params_.panelMaxWidth),1,8);
     const std::uint32_t panelSeed=params_.randomSeed^((std::uint32_t)rowIndex*0x85EBCA6Bu)^((std::uint32_t)colIndex*0xC2B2AE35u);
@@ -180,6 +185,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    }
   }
   if(!glyph)glyph=selectGlyph(candidates,target,shapeMatch,(params_.randomCharacters||params_.randomWords)?params_.randomAmount:0,rv);
+  if(params_.visualStyle==AsciiVisualStyle::Geometric){for(const auto* candidate:candidates){const char32_t cp=candidate->codepoint;if(cp==43||cp==42||cp==47||cp==92||cp==124||cp==60||cp==62||cp==94||cp==118||cp==91||cp==93||cp==123||cp==125||cp==40||cp==41||cp==35||cp==61||cp==45||cp==95||cp==46){glyph=candidate;break;}}}
   if(!glyph)continue;
   float cw=(float)(x1-x0),ch=(float)(y1-y0),aw=cw*(1-cellMargin),ah=ch*(1-cellMargin);
   float numberScale=glyph->numberToken?clampf(params_.numberSize/100.0f,.1f,2.0f):1.0f;
@@ -187,12 +193,17 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   const float glyphAspect=(glyph->height>0)?(float)glyph->width/(float)glyph->height:1.0f;
   const float cellAspect=aw/std::max(1.0f,ah);
   if(glyphAspect>cellAspect)dh=dw/glyphAspect;else dw=dh*glyphAspect;
+  if(params_.visualStyle==AsciiVisualStyle::Organic){const float organic=0.82f+0.36f*(float)hash32(rv^0x0A6A91C3u)/(float)0xFFFFFFFFu;dw*=organic;dh*=organic;}
   int drawX1=x1;float left=(x0+x1-dw)*.5f;
+  if(params_.visualStyle==AsciiVisualStyle::Organic)left+=(float)((int)(rv%5)-2)*0.06f*cw;
+  if(params_.visualStyle==AsciiVisualStyle::Glitch)left+=(float)((int)((rv>>8)%7)-3)*0.08f*cw;
   if(glyph->wordToken){dh=std::max(1.0f,ah*glyphScale*clampf(params_.wordSize/100.0f,.25f,2.5f)*(1-charMargin));dw=std::max(cw,dh*glyphAspect);dw=std::min(dw,(float)(w-x0));drawX1=std::min(w,std::max(x1,x0+(int)std::ceil(dw)));left=(float)x0+charMargin*cw;}
   float top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
   if(glyph->wordToken&&drawX1>x1){Pixel wa{0,0,0,0};int wn=0;for(int yy=y0;yy<y1;++yy)for(int xx=x0;xx<drawX1;++xx){const Pixel& q=src.row(yy)[xx];wa.r+=q.r;wa.g+=q.g;wa.b+=q.b;wa.a+=q.a;++wn;}if(wn){float wi=1.0f/(float)wn;avg={wa.r*wi,wa.g*wi,wa.b*wi,wa.a*wi};}}
+  if(params_.visualStyle==AsciiVisualStyle::Photorealistic){const Pixel& center=src.at((x0+x1)/2,(y0+y1)/2);const float m=0.16f;avg.r=avg.r*(1-m)+center.r*m;avg.g=avg.g*(1-m)+center.g*m;avg.b=avg.b*(1-m)+center.b*m;}
   Pixel fg=params_.colorize?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
+  if(params_.visualStyle==AsciiVisualStyle::Glitch){const float glitch=(float)((rv>>16)&255u)/255.0f;const float flicker=0.72f+0.28f*std::fabs(std::sin((float)time*18.0f+glitch*6.28318f));fg.r=clamp01(fg.r*(0.65f+glitch*0.9f));fg.g=clamp01(fg.g*(0.7f+(1.0f-glitch)*0.7f));fg.b=clamp01(fg.b*(0.75f+glitch*0.8f));fg=scaled(fg,flicker);}
   if(params_.visualStyle==AsciiVisualStyle::Rainbow){
    const float hue=std::fmod((float)ci*0.000013f+(float)time*0.18f+mean*0.22f,1.0f)*6.0f;
    const float chroma=0.28f+0.72f*clamp01(mean),xh=chroma*(1.0f-std::fabs(std::fmod(hue,2.0f)-1.0f));
