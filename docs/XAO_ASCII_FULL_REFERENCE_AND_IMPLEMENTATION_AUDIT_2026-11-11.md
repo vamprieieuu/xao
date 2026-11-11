@@ -142,7 +142,26 @@ Palette preset names:
 
 Additional literal controls include Palette Mapping (Tonal / Original), Palette Color Strength, and Blend Mode (Normal, Multiply, Screen, Overlay, Soft Light, Difference, Add).
 
-The decompilation confirms a dedicated GlyphAtlas, character-set identity tables, per-glyph density ramps, source-cell accumulation and a BackdropPalette that sorts color stops and evaluates tonal palette colors. The exact RGB stop values for every named preset have **not** been conclusively recovered in this pass; they must not be invented. The next binary trace must recover the palette stop tables or verify the colors from the original plugin's rendered UI/output before XAO copies the exact palette values.
+The decompilation confirms a dedicated GlyphAtlas, character-set identity tables, per-glyph density ramps, source-cell accumulation and a BackdropPalette that sorts color stops and evaluates tonal palette colors. The exact RGB stop values were subsequently recovered from the palette-selection switch in the S1 decompilation. The AEX stores byte triplets and divides each channel by 255. The values are recorded in core/include/xao/AsciiReferencePalettes.h and listed below. Stops are evenly spaced for tonal interpolation.
+
+
+### 4.3 Exact S1 palette colors recovered from the binary
+
+The switch at the S1 renderer's parameter-to-RenderParams conversion sets packed byte values, then iterates them as RGB triplets and normalizes each channel by 255. The recovered RGB8 stops are:
+
+| Palette | Exact RGB hex stops |
+|---|---|
+| Monitor Glow | #222323, #F0F6F0 |
+| Game Boy DMG | #0F380F, #306230, #8BAC0F, #CADC81 |
+| Oil 6 | #272744, #494D7E, #8B6D9C, #C69FA5, #F2D3AB, #FBF5EF |
+| Retrotronic | #392B35, #BB474F, #486B7F, #7A9C96, #D1BFB0 |
+| Gothic Bit | #0E0E12, #1A1A24, #333346, #535373, #8080A4, #A6A6BF, #C1C1D2, #E6E6EC |
+| Curiosities | #46425E, #15788C, #FF6973, #00B9BE, #FFB0A3, #FFEECC |
+| CGA Palette 1 | #000000, #AA00AA, #00AA00, #AAAAAA |
+| CGA Palette 1 Bright | #000000, #FF55FF, #55FF55, #FFFFFF |
+| CGA Palette 0 Bright | #000000, #FF5555, #55FFFF, #5555FF |
+
+These values are stored as RGB8 reference data in XAO's AsciiReferencePalettes.h. Convert them from sRGB to XAO's linear-light working space before blending or interpolation. Do not replace them with similarly named public palettes: the recovered Game Boy DMG fourth stop is #CADC81, not the commonly seen #9BBC0F.
 
 ## 5. Open-source project reuse map
 
