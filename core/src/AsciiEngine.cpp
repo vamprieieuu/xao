@@ -124,7 +124,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);
  float glyphScale=clampf(params_.glyphScale*(params_.characterSize/88.0f),.1f,1.5f);
  float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
- const bool styleGlow=params_.visualStyle==AsciiVisualStyle::CGO;
+ const bool styleGlow=params_.visualStyle==AsciiVisualStyle::CGO||params_.visualStyle==AsciiVisualStyle::Mosaic;
  std::vector<float> glowMask,glowTemp;if(params_.glowEnabled||styleGlow){glowMask.assign((std::size_t)w*h,0.0f);glowTemp.resize(glowMask.size());}
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.enableAncient||params_.enableEnglish||params_.enableArabic;
@@ -229,11 +229,25 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  if(params_.visualStyle==AsciiVisualStyle::Mosaic){
   const int tile=std::clamp(cell*3,6,384);
   for(int ty=0;ty<h;ty+=tile)for(int tx=0;tx<w;tx+=tile){
-   Pixel avgTile{0,0,0,0};int count=0;for(int yy=ty;yy<std::min(h,ty+tile);++yy)for(int xx=tx;xx<std::min(w,tx+tile);++xx){const Pixel& q=src.at(xx,yy);avgTile.r+=q.r;avgTile.g+=q.g;avgTile.b+=q.b;avgTile.a+=q.a;++count;}
+   const int xEnd=std::min(w,tx+tile),yEnd=std::min(h,ty+tile);Pixel avgTile{0,0,0,0};int count=0;
+   for(int yy=ty;yy<yEnd;++yy)for(int xx=tx;xx<xEnd;++xx){const Pixel& q=src.at(xx,yy);avgTile.r+=q.r;avgTile.g+=q.g;avgTile.b+=q.b;avgTile.a+=q.a;++count;}
    if(!count)continue;const float invTile=1.0f/(float)count;avgTile.r*=invTile;avgTile.g*=invTile;avgTile.b*=invTile;avgTile.a*=invTile;
    const float lum=clamp01(.2126f*avgTile.r+.7152f*avgTile.g+.0722f*avgTile.b);
-   avgTile.r=avgTile.r*0.45f+lum*0.55f;avgTile.g=avgTile.g*0.45f+lum*0.55f;avgTile.b=avgTile.b*0.45f+lum*0.55f;
-   for(int yy=ty;yy<std::min(h,ty+tile);++yy)for(int xx=tx;xx<std::min(w,tx+tile);++xx){Pixel& q=dst.at(xx,yy);q.r=q.r*0.58f+avgTile.r*0.42f;q.g=q.g*0.58f+avgTile.g*0.42f;q.b=q.b*0.58f+avgTile.b*0.42f;q.a=std::max(q.a,avgTile.a*0.42f);}
+   Pixel mosaic{avgTile.r*0.45f+lum*0.55f,avgTile.g*0.45f+lum*0.55f,avgTile.b*0.45f+lum*0.55f,avgTile.a};
+   for(int yy=ty;yy<yEnd;++yy)for(int xx=tx;xx<xEnd;++xx){Pixel& q=dst.at(xx,yy);q.r=q.r*0.58f+mosaic.r*0.42f;q.g=q.g*0.58f+mosaic.g*0.42f;q.b=q.b*0.58f+mosaic.b*0.42f;q.a=std::max(q.a,mosaic.a*0.42f);}
+   const std::uint32_t tileSeed=hash32(params_.randomSeed^(std::uint32_t)tx*0x9E3779B9u^(std::uint32_t)ty*0x85EBCA6Bu);
+   if(candidates.empty()||(tileSeed&3u)==0u)continue;
+   const GlyphBitmap* big=candidates[(tileSeed>>2)%candidates.size()];
+   float bw=(float)(xEnd-tx)*0.72f,bh=(float)(yEnd-ty)*0.72f;
+   const float aspect=big->height>0?(float)big->width/(float)big->height:1.0f;
+   if(aspect>bw/std::max(1.0f,bh))bh=bw/aspect;else bw=bh*aspect;
+   const float left=((float)tx+(float)xEnd-bw)*0.5f,top=((float)ty+(float)yEnd-bh)*0.5f;
+   const float alpha=clamp01(avgTile.a);Pixel ink=avgTile;
+   if(ink.a>1e-6f){ink.r/=ink.a;ink.g/=ink.a;ink.b/=ink.a;}
+   const float gray=.2126f*ink.r+.7152f*ink.g+.0722f*ink.b;
+   ink.r=clamp01(ink.r*0.55f+gray*0.45f);ink.g=clamp01(ink.g*0.55f+gray*0.45f);ink.b=clamp01(ink.b*0.55f+gray*0.45f);
+   const float boost=1.15f+(float)((tileSeed>>12)&255u)/255.0f*0.65f;ink.r=clamp01(ink.r*boost);ink.g=clamp01(ink.g*boost);ink.b=clamp01(ink.b*boost);ink=scaled(ink,alpha);
+   for(int yy=ty;yy<yEnd;++yy)for(int xx=tx;xx<xEnd;++xx){float u=((float)xx+0.5f-left)/std::max(1.0f,bw),v=((float)yy+0.5f-top)/std::max(1.0f,bh);if(u<0||u>1||v<0||v>1)continue;float cov=maskAt(*big,u,v,params_.antiAliasing);if(cov<=0.01f)continue;Pixel& q=dst.at(xx,yy);const float sa=cov*alpha,inv=1.0f-sa;q.r=q.r*inv+ink.r*cov;q.g=q.g*inv+ink.g*cov;q.b=q.b*inv+ink.b*cov;q.a=std::max(q.a,sa);if(!glowMask.empty())glowMask[(std::size_t)yy*w+xx]=std::max(glowMask[(std::size_t)yy*w+xx],cov*0.75f);}
   }
  }
  if(params_.visualStyle==AsciiVisualStyle::Threshold){
@@ -247,6 +261,15 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    const int length=std::max(1,(int)std::lround((float)(xEnd-x)*clamp01((l-threshold)/std::max(0.001f,1.0f-threshold))));
    const float inv=1.0f/(float)count;color.r*=inv;color.g*=inv;color.b*=inv;color.a*=inv;
    for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=x;xx<std::min(x+length,w);++xx)dst.at(xx,yy)=color;
+  }
+ }
+ if(params_.visualStyle==AsciiVisualStyle::CGO&&!glowMask.empty()){
+  for(int y=1;y<h-1;++y)for(int x=1;x<w-1;++x){
+   auto lumAt=[&](int sx,int sy){return sampleChannel(src.at(sx,sy),AsciiChannelMode::Luma);};
+   const float gx=(lumAt(x+1,y-1)+2.0f*lumAt(x+1,y)+lumAt(x+1,y+1))-(lumAt(x-1,y-1)+2.0f*lumAt(x-1,y)+lumAt(x-1,y+1));
+   const float gy=(lumAt(x-1,y+1)+2.0f*lumAt(x,y+1)+lumAt(x+1,y+1))-(lumAt(x-1,y-1)+2.0f*lumAt(x,y-1)+lumAt(x+1,y-1));
+   const float edge=clamp01(std::sqrt(gx*gx+gy*gy)*0.9f);
+   glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],edge*0.55f);
   }
  }
  if((params_.glowEnabled||styleGlow)&&!glowMask.empty()){
