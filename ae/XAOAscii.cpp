@@ -21,14 +21,14 @@
 namespace {
 enum {
  P_INPUT=0,
- P_TOPIC_CORE,P_PRESET,P_CHARSET,P_CELL,P_AMOUNT,P_USE_FADE,P_FADE,P_STRENGTH,P_TOPIC_CORE_END,
+ P_TOPIC_MAIN,P_TOPIC_CORE,P_PRESET,P_CHARSET,P_CELL,P_AMOUNT,P_STRENGTH,P_TOPIC_CORE_END,
  P_TOPIC_SCALE,P_USE_CLIP_SCALE,P_CLIP_SCALE,P_USE_CHAR_SIZE,P_CHAR_SIZE,P_USE_NUMBER_SIZE,P_NUMBER_SIZE,
  P_USE_WORD_SIZE,P_WORD_SIZE,P_USE_CHAR_MARGIN,P_CHAR_MARGIN,P_CELL_MARGIN,P_TOPIC_SCALE_END,
  P_TOPIC_RANDOM,P_RANDOM_CHAR,P_RANDOM_WORD,P_RANDOM_TIMING,P_RANDOM_AMOUNT,P_RANDOM_SPEED,P_RANDOM_SEED,P_RANDOM_VARIATION,P_TOPIC_RANDOM_END,
  P_TOPIC_ANCIENT,P_ANCIENT_LETTERS,P_ANCIENT_NUMBERS,P_ANCIENT_WORDS,P_ANCIENT_FONT,P_ANCIENT_SIZE_ENABLE,P_ANCIENT_SIZE,P_TOPIC_ANCIENT_END,
  P_TOPIC_ENGLISH,P_ENGLISH_LETTERS,P_ENGLISH_NUMBERS,P_ENGLISH_WORDS,P_ENGLISH_FONT,P_ENGLISH_SIZE_ENABLE,P_ENGLISH_SIZE,P_TOPIC_ENGLISH_END,
  P_TOPIC_ARABIC,P_ARABIC_LETTERS,P_ARABIC_NUMBERS,P_ARABIC_WORDS,P_ARABIC_FONT,P_ARABIC_SIZE_ENABLE,P_ARABIC_SIZE,P_ARABIC_NUM_STYLE,P_TOPIC_ARABIC_END,
- P_TOPIC_COLOR,P_CONTRAST,P_BRIGHTNESS,P_INVERT,P_COLORIZE,P_AA,P_MAPPING_MODE,P_GAMMA,P_CHANNEL_MODE,P_PALETTE,P_PALETTE_STRENGTH,P_EDGE_THRESHOLD,P_PRESERVE_ALPHA,P_TRANSFER,P_TOPIC_COLOR_END,
+ P_TOPIC_COLOR,P_PALETTE,P_PALETTE_STRENGTH,P_TOPIC_COLOR_END,P_TOPIC_MAIN_END,
  P_COUNT
 };
 enum { T_LINEAR=1,T_REC709=2,T_SRGB=3 };
@@ -56,13 +56,12 @@ template<class PX>PF_Err Render(const PF_EffectWorld* s,PF_EffectWorld* d,const 
 PF_Err Global(PF_OutData* o){o->my_version=PF_VERSION(1,1,0,PF_Stage_DEVELOP,1);o->out_flags=PF_OutFlag_DEEP_COLOR_AWARE;o->out_flags2=PF_OutFlag2_FLOAT_COLOR_AWARE|PF_OutFlag2_SUPPORTS_SMART_RENDER|PF_OutFlag2_SUPPORTS_THREADED_RENDERING;return PF_Err_NONE;}
 PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
+ PF_ADD_TOPICX("XAO ASCII",0,P_TOPIC_MAIN);
  PF_ADD_TOPICX("ASCII Core",0,P_TOPIC_CORE);
  PF_ADD_POPUPX("ASCII Preset",21,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch",0,P_PRESET);
  PF_ADD_POPUPX("Character Set",29,1,"Use Preset|Language Only|Fantasy Marks|Vampire Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed",0,P_CHARSET);
- PF_ADD_FLOAT_SLIDERX("ASCII Cells",2,512,2,512,12,PF_Precision_INTEGER,0,0,P_CELL);
+ PF_ADD_FLOAT_SLIDERX("ASCII Cells",2,512,2,512,8,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("ASCII Amount",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_AMOUNT);
- PF_ADD_CHECKBOXX("Override Preset Fade",0,0,P_USE_FADE);
- PF_ADD_FLOAT_SLIDERX("ASCII Fade",0,200,0,200,0,PF_Precision_INTEGER,0,0,P_FADE);
  PF_ADD_FLOAT_SLIDERX("ASCII Strength",0,200,0,200,100,PF_Precision_INTEGER,0,0,P_STRENGTH);
  PF_END_TOPIC(P_TOPIC_CORE_END);
  PF_ADD_TOPICX("Scale & Spacing",PF_ParamFlag_START_COLLAPSED,P_TOPIC_SCALE);
@@ -80,10 +79,10 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_END_TOPIC(P_TOPIC_SCALE_END);
  PF_ADD_TOPICX("Randomization",PF_ParamFlag_START_COLLAPSED,P_TOPIC_RANDOM);
  PF_ADD_CHECKBOXX("Random Characters",1,0,P_RANDOM_CHAR);
- PF_ADD_CHECKBOXX("Random Words",0,0,P_RANDOM_WORD);
+ PF_ADD_CHECKBOXX("Random Words",1,0,P_RANDOM_WORD);
  PF_ADD_CHECKBOXX("Random Timing",1,0,P_RANDOM_TIMING);
- PF_ADD_FLOAT_SLIDERX("Random Amount",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_RANDOM_AMOUNT);
- PF_ADD_FLOAT_SLIDERX("Random Speed",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_RANDOM_SPEED);
+ PF_ADD_FLOAT_SLIDERX("Random Amount",0,100,0,100,85,PF_Precision_INTEGER,0,0,P_RANDOM_AMOUNT);
+ PF_ADD_FLOAT_SLIDERX("Random Speed",0,100,0,100,30,PF_Precision_INTEGER,0,0,P_RANDOM_SPEED);
  PF_ADD_FLOAT_SLIDERX("Random Seed",0,99999,0,99999,0,PF_Precision_INTEGER,0,0,P_RANDOM_SEED);
  PF_ADD_FLOAT_SLIDERX("Random Timing Variation",0,10,0,10,1,PF_Precision_TENTHS,0,0,P_RANDOM_VARIATION);
  PF_END_TOPIC(P_TOPIC_RANDOM_END);
@@ -112,21 +111,11 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Arabic Size",10,400,10,400,100,PF_Precision_INTEGER,0,0,P_ARABIC_SIZE);
  PF_ADD_POPUPX("Arabic Numerals",3,1,"Arabic-Indic|Persian|Western",0,P_ARABIC_NUM_STYLE);
  PF_END_TOPIC(P_TOPIC_ARABIC_END);
- PF_ADD_TOPICX("Color & Mapping",PF_ParamFlag_START_COLLAPSED,P_TOPIC_COLOR);
- PF_ADD_FLOAT_SLIDERX("Contrast",0,4,0,4,1,PF_Precision_TENTHS,0,0,P_CONTRAST);
- PF_ADD_FLOAT_SLIDERX("Brightness",-1,1,-1,1,0,PF_Precision_TENTHS,0,0,P_BRIGHTNESS);
- PF_ADD_CHECKBOXX("Invert",0,0,P_INVERT);
- PF_ADD_CHECKBOXX("Use Source Colors",1,0,P_COLORIZE);
- PF_ADD_CHECKBOXX("Anti-Aliasing",1,0,P_AA);
- PF_ADD_POPUPX("Glyph Mapping",4,1,"Auto|Shape Match|Luminance Ramp|Edge Directional",0,P_MAPPING_MODE);
- PF_ADD_FLOAT_SLIDERX("Gamma",0.1,4.0,0.1,4.0,2.2,PF_Precision_TENTHS,0,0,P_GAMMA);
- PF_ADD_POPUPX("Character Tone Source",4,1,"Luma|Red|Green|Blue",0,P_CHANNEL_MODE);
+ PF_ADD_TOPICX("Color Palette",PF_ParamFlag_START_COLLAPSED,P_TOPIC_COLOR);
  PF_ADD_POPUPX("Color Palette",10,1,"None|Green Phosphor|Game Boy DMG|Oil 6|Retrotronic|Gothic Bit|Curiosities|CGA Palette 1|CGA Palette 1 Bright|CGA Palette 0 Bright",0,P_PALETTE);
- PF_ADD_FLOAT_SLIDERX("Palette Strength",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_PALETTE_STRENGTH);
- PF_ADD_FLOAT_SLIDERX("Edge Threshold",0,1,0,1,0.15,PF_Precision_TENTHS,0,0,P_EDGE_THRESHOLD);
- PF_ADD_CHECKBOXX("Preserve Cell Alpha",1,0,P_PRESERVE_ALPHA);
- PF_ADD_POPUPX("Input Transfer",3,1,"Linear|Rec.709|sRGB",0,P_TRANSFER);
+ PF_ADD_FLOAT_SLIDERX("Palette Strength",0,200,0,200,150,PF_Precision_INTEGER,0,0,P_PALETTE_STRENGTH);
  PF_END_TOPIC(P_TOPIC_COLOR_END);
+ PF_END_TOPIC(P_TOPIC_MAIN_END);
  out->num_params=P_COUNT;return PF_Err_NONE;
 }
 PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
@@ -157,9 +146,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_CHARSET,[&](PF_ParamDef& p){if(p.u.pd.value==2)state->ascii.characterSet=xao::AsciiCharacterSetId::Count;else if(p.u.pd.value>2)state->ascii.characterSet=(xao::AsciiCharacterSetId)std::clamp<A_long>(p.u.pd.value-3,0,(A_long)xao::AsciiCharacterSetId::Count-1);});
  read(P_CELL,[&](PF_ParamDef& p){state->ascii.cellSize=(int)p.u.fs_d.value;});
  read(P_AMOUNT,[&](PF_ParamDef& p){state->ascii.asciiAmount=(float)p.u.fs_d.value;});
- bool overrideFade=false;read(P_USE_FADE,[&](PF_ParamDef& p){overrideFade=p.u.bd.value!=0;});
- read(P_FADE,[&](PF_ParamDef& p){state->ascii.asciiFade=(float)p.u.fs_d.value;if(overrideFade)state->ascii.blendWithOriginal=(float)p.u.fs_d.value;});
- read(P_STRENGTH,[&](PF_ParamDef& p){state->ascii.asciiStrength=(float)p.u.fs_d.value;});
+  read(P_STRENGTH,[&](PF_ParamDef& p){state->ascii.asciiStrength=(float)p.u.fs_d.value;});
  read(P_USE_CLIP_SCALE,[&](PF_ParamDef& p){state->ascii.useClipScale=p.u.bd.value!=0;});
  read(P_CLIP_SCALE,[&](PF_ParamDef& p){state->ascii.glyphScale=(float)p.u.fs_d.value/100.0f;});
  read(P_USE_CHAR_SIZE,[&](PF_ParamDef& p){state->ascii.useCharacterSize=p.u.bd.value!=0;});
@@ -171,16 +158,11 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_USE_CHAR_MARGIN,[&](PF_ParamDef& p){state->ascii.useCharacterMargin=p.u.bd.value!=0;});
  read(P_CHAR_MARGIN,[&](PF_ParamDef& p){if(state->ascii.useCharacterMargin)state->ascii.characterMargin=std::clamp(state->ascii.characterMargin+(float)p.u.fs_d.value,0.0f,180.0f);});
  read(P_CELL_MARGIN,[&](PF_ParamDef& p){state->ascii.cellMargin=std::clamp(state->ascii.cellMargin+(float)p.u.fs_d.value,0.0f,180.0f);});
- read(P_CONTRAST,[&](PF_ParamDef& p){state->ascii.contrast=(float)p.u.fs_d.value;});
- read(P_BRIGHTNESS,[&](PF_ParamDef& p){state->ascii.brightness=(float)p.u.fs_d.value;});
- read(P_INVERT,[&](PF_ParamDef& p){if(p.u.bd.value)state->ascii.invert=!state->ascii.invert;});
- read(P_COLORIZE,[&](PF_ParamDef& p){state->ascii.colorize=p.u.bd.value!=0;});
- read(P_AA,[&](PF_ParamDef& p){state->ascii.antiAliasing=p.u.bd.value!=0;});
  read(P_RANDOM_CHAR,[&](PF_ParamDef& p){state->ascii.randomCharacters=p.u.bd.value!=0;});
  read(P_RANDOM_WORD,[&](PF_ParamDef& p){state->ascii.randomWords=p.u.bd.value!=0;});
  read(P_RANDOM_TIMING,[&](PF_ParamDef& p){state->ascii.randomTiming=p.u.bd.value!=0;});
- read(P_RANDOM_AMOUNT,[&](PF_ParamDef& p){state->ascii.randomAmount=std::clamp(state->ascii.randomAmount+(float)p.u.fs_d.value/100.0f,0.0f,1.0f);});
- read(P_RANDOM_SPEED,[&](PF_ParamDef& p){state->ascii.randomSpeed=std::clamp(state->ascii.randomSpeed+(float)p.u.fs_d.value/100.0f*10.0f,0.0f,10.0f);});
+ read(P_RANDOM_AMOUNT,[&](PF_ParamDef& p){state->ascii.randomAmount=std::clamp((float)p.u.fs_d.value/100.0f,0.0f,1.0f);});
+ read(P_RANDOM_SPEED,[&](PF_ParamDef& p){state->ascii.randomSpeed=std::clamp((float)p.u.fs_d.value/100.0f*10.0f,0.0f,10.0f);});
  read(P_RANDOM_SEED,[&](PF_ParamDef& p){state->ascii.randomSeed=(std::uint32_t)std::max(0.0,p.u.fs_d.value);});
  read(P_RANDOM_VARIATION,[&](PF_ParamDef& p){state->ascii.randomTimingVariation=(float)p.u.fs_d.value;});
  read(P_ANCIENT_LETTERS,[&](PF_ParamDef& p){state->ascii.ancientLetters=p.u.bd.value!=0;});
@@ -202,14 +184,8 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_ARABIC_SIZE_ENABLE,[&](PF_ParamDef& p){state->ascii.useArabicSize=p.u.bd.value!=0;});
  read(P_ARABIC_SIZE,[&](PF_ParamDef& p){state->ascii.arabicSize=(float)p.u.fs_d.value;});
  read(P_ARABIC_NUM_STYLE,[&](PF_ParamDef& p){state->ascii.arabicNumberStyle=(std::uint8_t)std::clamp<A_long>(p.u.pd.value-1,0,2);});
- read(P_MAPPING_MODE,[&](PF_ParamDef& p){state->ascii.mappingMode=(xao::AsciiMappingMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
- read(P_GAMMA,[&](PF_ParamDef& p){state->ascii.gamma=(float)p.u.fs_d.value;});
- read(P_CHANNEL_MODE,[&](PF_ParamDef& p){state->ascii.channelMode=(xao::AsciiChannelMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
  read(P_PALETTE,[&](PF_ParamDef& p){state->ascii.paletteIndex=(std::uint8_t)std::clamp<A_long>(p.u.pd.value-1,0,9);});
  read(P_PALETTE_STRENGTH,[&](PF_ParamDef& p){state->ascii.paletteStrength=(float)p.u.fs_d.value;});
- read(P_EDGE_THRESHOLD,[&](PF_ParamDef& p){state->ascii.edgeThreshold=(float)p.u.fs_d.value;});
- read(P_PRESERVE_ALPHA,[&](PF_ParamDef& p){state->ascii.preserveCellAlpha=p.u.bd.value!=0;});
- read(P_TRANSFER,[&](PF_ParamDef& p){state->transfer=p.u.pd.value;});
  if(err!=PF_Err_NONE){delete state;return err;}
  try{state->ascii.atlas=xao::win32::buildGlyphAtlas(state->ascii);}
  catch(const std::bad_alloc&){delete state;return PF_Err_OUT_OF_MEMORY;}
