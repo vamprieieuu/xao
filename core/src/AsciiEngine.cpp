@@ -26,13 +26,13 @@ constexpr char32_t k3[]=U"アイウエオカキクケコサシスセソタチツ
 constexpr char32_t k4[]=U"01";
 constexpr char32_t k5[]=U" .:-=+*#%@";
 constexpr char32_t k6[]=U"Xx";
-constexpr char32_t k7[]=U"oO0@";
+constexpr char32_t k7[]=U"●○◉◎◌◍◦•∙·";
 constexpr char32_t k8[]=U".*+";
 constexpr char32_t k9[]=U"<>^v";
 constexpr char32_t k10[]=U".:;,+";
 constexpr char32_t k11[]=U"[]{}<>+-|_/";
 constexpr char32_t k12[]=U"[]{}<>+-|_=:/\\";
-constexpr char32_t k13[]=U"0123456789ABCDEF";
+constexpr char32_t k13[]=U"ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
 constexpr char32_t k14[]=U"|/\\-_=.";
 constexpr char32_t kS1AtlasChars[]=U" \u0060.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@";
 constexpr char32_t kS1Blocks[]=U" \u2591\u2592\u2593\u2588";
@@ -96,14 +96,15 @@ std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept
 }
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas(){static const auto a=makeBuiltin();return a;}
 void applyCratesPreset(AsciiParams& p,AsciiPresetId id) noexcept{
- const auto& v=cratesPreset(id);p.preset=id;p.presetCharacterSize=v.characterSize;p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=v.randomShuffle>0;p.randomTiming=v.randomSpeed>0;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);
+ const auto& v=cratesPreset(id);p.preset=id;p.presetCharacterSize=v.characterSize;p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=true;p.randomWords=true;p.randomTiming=true;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);if(id==AsciiPresetId::Corrupted){p.visualStyle=AsciiVisualStyle::Glitch;p.characterSet=AsciiCharacterSetId::CratesCircuits2;p.blendWithOriginal=0.0f;p.randomAmount=0.95f;p.randomSpeed=1.5f;}if(id==AsciiPresetId::AlienSignal){p.tintStrength=0.0f;p.tintColor={1,1,1,1};p.characterSet=AsciiCharacterSetId::CratesAlienFont;}if(id==AsciiPresetId::CirclesAndDots){p.characterSet=AsciiCharacterSetId::CratesDots;p.characterSize=70.0f;p.characterMargin=12.0f;p.cellMargin=2.0f;}
 }
 void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) const{
  if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
  if(src.empty())return;
+ dst=src;
  int w=src.width(),h=src.height(),cell=std::max(2,std::min(512,params_.cellSize));
  if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
- float contrast=clampf(params_.contrast*(params_.asciiStrength/100.0f),0,4),brightness=clampf(params_.brightness,-1,1);
+ float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);const float glyphOpacity=clamp01(params_.asciiStrength/100.0f)*clamp01(params_.asciiAmount/100.0f);
  float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f)*clampf(params_.presetCharacterSize/100.0f,.1f,3.0f);
  if(params_.visualStyle==AsciiVisualStyle::Micro)glyphScale*=0.68f;
  if(params_.visualStyle==AsciiVisualStyle::Photorealistic)glyphScale*=0.92f;
@@ -111,9 +112,9 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
 
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);
- const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
+ const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;const bool languageOnly=params_.ancientLetters||params_.ancientNumbers||params_.ancientWords||params_.englishLetters||params_.englishNumbers||params_.englishWords||params_.arabicLetters||params_.arabicNumbers||params_.arabicWords;
  auto inSelectedSet=[&](char32_t cp){switch(params_.characterSet){case AsciiCharacterSetId::S1Braille:return cp>=0x2800&&cp<=0x28FF;case AsciiCharacterSetId::S1Katakana:return cp>=0x30A1&&cp<=0x30F6;default:return !set.empty()&&set.find(cp)!=std::u32string_view::npos;}};
- for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!g.familyToken&&!g.wordToken&&g.codepoint&&!inSelectedSet(g.codepoint))continue;candidates.push_back(&g);}
+ for(const auto& g:atlas->glyphs){if(languageOnly&&!g.familyToken)continue;if(g.wordToken&&!includeWords)continue;if(!g.familyToken&&!g.wordToken&&g.codepoint&&!inSelectedSet(g.codepoint))continue;candidates.push_back(&g);}
  int rampLimit=0;if(params_.characterSet==AsciiCharacterSetId::S1Classic)rampLimit=10;else if(params_.characterSet==AsciiCharacterSetId::S1Minimal)rampLimit=6;else if(params_.characterSet==AsciiCharacterSetId::S1Bourke)rampLimit=28;
  if(rampLimit>0){std::vector<const GlyphBitmap*> base;for(auto* g:candidates)if(!g->familyToken&&!g->wordToken)base.push_back(g);std::sort(base.begin(),base.end(),[](const GlyphBitmap* a,const GlyphBitmap* b){return a->density<b->density;});if((int)base.size()>rampLimit){base.resize((std::size_t)rampLimit);candidates.erase(std::remove_if(candidates.begin(),candidates.end(),[&](const GlyphBitmap* g){return !g->familyToken&&!g->wordToken&&std::find(base.begin(),base.end(),g)==base.end();}),candidates.end());}}
  if(candidates.empty()){dst=src;return;}
@@ -145,7 +146,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   for(float& v:target){v=std::pow(clamp01(applyAsciiToneMap(v,contrast,brightness)),1.0f/gamma);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
   std::uint32_t ci=hash32(params_.randomSeed^((std::uint32_t)rowIndex*0x9E3779B9u)^((std::uint32_t)colIndex*0x85EBCA6Bu));double time=std::max(0.0,ctx.timeSeconds);
   bool animate=params_.randomCharacters||params_.randomWords;
-  double cellSpeed=1.0+clampf(params_.randomSpeed,0,10)*24.0;
+  double cellSpeed=1.0+clampf(params_.randomSpeed,0,10)*60.0;
   if(params_.randomTiming){
    const float jitter=hash32(params_.randomSeed^ci^0x71A1u)/(float)0xFFFFFFFFu;
    const float variation=clampf(params_.randomTimingVariation/10.0f,0,1);
@@ -197,7 +198,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    const float chroma=0.28f+0.72f*clamp01(mean),xh=chroma*(1.0f-std::fabs(std::fmod(hue,2.0f)-1.0f));
    float rr=0,gg=0,bb=0;
    if(hue<1){rr=chroma;gg=xh;}else if(hue<2){rr=xh;gg=chroma;}else if(hue<3){gg=chroma;bb=xh;}else if(hue<4){gg=xh;bb=chroma;}else if(hue<5){rr=xh;bb=chroma;}else{rr=chroma;bb=xh;}
-   fg.r=rr+0.12f;fg.g=gg+0.12f;fg.b=bb+0.12f;fg.a=1.0f;
+   fg.r=fg.r*0.72f+(rr+0.12f)*0.28f;fg.g=fg.g*0.72f+(gg+0.12f)*0.28f;fg.b=fg.b*0.72f+(bb+0.12f)*0.28f;fg.a=1.0f;
   }
   if(params_.paletteIndex>0&&params_.paletteIndex<=kS1PaletteCount){
    const auto* palette=s1Palette((S1PaletteId)params_.paletteIndex);
@@ -213,8 +214,23 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
     fg.r=fg.r*(1.0f-amount)+color.r*amount;fg.g=fg.g*(1.0f-amount)+color.g*amount;fg.b=fg.b*(1.0f-amount)+color.b*amount;
    }
   }
-  fg=scaled(fg,alpha);Pixel bg=params_.preserveCellAlpha?scaled(params_.paper,alpha):params_.paper;
-  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c)*clamp01(params_.asciiAmount/100.0f);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=std::clamp(params_.blendWithOriginal/100.0f,0.0f,2.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
+  fg=scaled(fg,alpha);
+  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){
+   const Pixel& original=src.row(y)[x];float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;
+   float mask=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0.0f;
+   Pixel base=original;
+   if(params_.visualStyle==AsciiVisualStyle::Liquid){
+    const float radius=std::max(1.0f,std::min(cw,ch)*0.18f),lx=(float)(x-x0)+0.5f,ly=(float)(y-y0)+0.5f;
+    const float qx=std::max(radius-lx,std::max(0.0f,lx-(cw-radius))),qy=std::max(radius-ly,std::max(0.0f,ly-(ch-radius)));
+    const bool inside=qx*qx+qy*qy<=radius*radius;
+    if(inside){const float panel=0.92f;Pixel panelColor=avg;float pa=std::max(avg.a,1.0e-6f);panelColor.r=clamp01(panelColor.r/pa);panelColor.g=clamp01(panelColor.g/pa);panelColor.b=clamp01(panelColor.b/pa);base.r=original.r*(1-panel)+panelColor.r*panel;base.g=original.g*(1-panel)+panelColor.g*panel;base.b=original.b*(1-panel)+panelColor.b*panel;}
+   }
+   const float opacity=clamp01(mask)*glyphOpacity;
+   Pixel ink=fg;
+   if(params_.visualStyle==AsciiVisualStyle::Liquid){const float lum=clamp01(.2126f*avg.r+.7152f*avg.g+.0722f*avg.b);const float text=(lum>0.52f)?0.10f:0.96f;ink={text,text,text,1.0f};}
+   else {const float lum=clamp01(.2126f*avg.r+.7152f*avg.g+.0722f*avg.b);const float gain=(lum>0.52f)?0.32f:1.55f;ink.r=clamp01(ink.r*gain);ink.g=clamp01(ink.g*gain);ink.b=clamp01(ink.b*gain);}
+   Pixel r{base.r*(1-opacity)+ink.r*opacity,base.g*(1-opacity)+ink.g*opacity,base.b*(1-opacity)+ink.b*opacity,original.a};out[x]=r;
+  }}
    x0=drawX1;
   }
   y0=y1;
