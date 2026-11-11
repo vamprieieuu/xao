@@ -26,6 +26,12 @@ int main(){
  auto wordAtlas=std::make_shared<xao::GlyphAtlas>();xao::GlyphBitmap wordGlyph;wordGlyph.wordToken=true;wordGlyph.width=8;wordGlyph.height=8;wordGlyph.coverage.assign(64,255);wordGlyph.density=1.0f;wordAtlas->glyphs.push_back(wordGlyph);wordOnly.atlas=wordAtlas;
  xao::Image wordSource(8,8),wordOutput(8,8);for(auto& px:wordSource.pixels())px={0,0,0,1};xao::AsciiEngine wordEngine(wordOnly);wordEngine.render(wordSource,wordOutput,{});
  bool wordVisible=false;for(const auto& px:wordOutput.pixels())wordVisible|=px.a>0.5f;if(!wordVisible)return fail("word tokens remain renderable when Random Words is enabled");
+ // Source-channel mapping must change glyph tone independently from output color.
+ xao::Image channelSource(8,8),redMapped(8,8),blueMapped(8,8);for(auto& px:channelSource.pixels())px={1,0,0,1};
+ xao::AsciiParams redMode;redMode.colorize=false;redMode.channelMode=xao::AsciiChannelMode::Red;
+ xao::AsciiParams blueMode=redMode;blueMode.channelMode=xao::AsciiChannelMode::Blue;
+ xao::AsciiEngine redEngine(redMode),blueEngine(blueMode);redEngine.render(channelSource,redMapped,{});blueEngine.render(channelSource,blueMapped,{});
+ bool channelDiff=false;for(std::size_t i=0;i<redMapped.pixels().size();++i)channelDiff|=!near(redMapped.pixels()[i].a,blueMapped.pixels()[i].a);if(!channelDiff)return fail("RGB channel mode changes glyph mapping");
  xao::AsciiParams preset;xao::applyCratesPreset(preset,xao::AsciiPresetId::Matrix);if(preset.characterSet!=xao::AsciiCharacterSetId::CratesBinary||!preset.randomCharacters)return fail("preset application");
  xao::AsciiParams rp=p;rp.randomCharacters=true;rp.randomAmount=0.8f;rp.randomTiming=true;rp.randomSpeed=1.0f;xao::AsciiEngine re(rp);xao::Image r0(32,16),r1(32,16),r2(32,16);xao::RenderContext c0;c0.timeSeconds=0; xao::RenderContext c1;c1.timeSeconds=0;xao::RenderContext c2;c2.timeSeconds=1;re.render(src,r0,c0);re.render(src,r1,c1);re.render(src,r2,c2);bool stable=true,animated=false;for(std::size_t i=0;i<r0.pixels().size();++i){stable&=near(r0.pixels()[i].r,r1.pixels()[i].r)&&near(r0.pixels()[i].a,r1.pixels()[i].a);animated|=!near(r0.pixels()[i].r,r2.pixels()[i].r)||!near(r0.pixels()[i].a,r2.pixels()[i].a);}if(!stable)return fail("random deterministic at same time");if(!animated)return fail("random timing advances");
  std::cout<<"XAO ASCII engine tests passed\n";return 0;
