@@ -18,7 +18,7 @@
 namespace xao::win32 {
 namespace {
 constexpr int kAtlasW=96,kAtlasH=28;
-struct Token { std::wstring text; char32_t codepoint=0; bool word=false,number=false,rtl=false; int fontResource=0; float sizeScale=1.0f; };
+struct Token { std::wstring text; char32_t codepoint=0; bool word=false,number=false,rtl=false,family=false; int fontResource=0; float sizeScale=1.0f; };
 std::wstring toWide(char32_t cp){std::wstring s;if(cp<=0xFFFF)s.push_back((wchar_t)cp);else{cp-=0x10000;s.push_back((wchar_t)(0xD800+(cp>>10)));s.push_back((wchar_t)(0xDC00+(cp&0x3FF)));}return s;}
 bool isNumber(char32_t cp){return(cp>=U'0'&&cp<=U'9')||(cp>=0x0660&&cp<=0x0669)||(cp>=0x06F0&&cp<=0x06F9)||(cp>=0x2160&&cp<=0x2188);}
 int resourceFor(int group,int index){index=std::max(1,index);return (group==0?17000:group==1?17100:17200)+index;}
@@ -52,38 +52,37 @@ std::wstring fontFace(int id){
  faces.emplace(id,face);return face;
 }
 bool hasGlyph(HDC dc,const std::wstring& text){if(text.empty())return false;std::vector<WORD> glyphs(text.size());DWORD result=GetGlyphIndicesW(dc,text.c_str(),(int)text.size(),glyphs.data(),GGI_MARK_NONEXISTING_GLYPHS);return result!=GDI_ERROR&&std::find(glyphs.begin(),glyphs.end(),(WORD)0xFFFF)==glyphs.end();}
-void addCodepoint(std::vector<Token>& out,std::set<std::wstring>& seen,char32_t cp,int font,bool rtl=false,float scale=1.0f){auto s=toWide(cp);if(s.empty())return;std::wstring key=std::to_wstring(font)+L"|"+s;if(!seen.insert(key).second)return;out.push_back({std::move(s),cp,false,isNumber(cp),rtl,font,scale});}
-void addRange(std::vector<Token>& out,std::set<std::wstring>& seen,char32_t first,char32_t last,int font,bool rtl=false,float scale=1.0f){for(char32_t cp=first;cp<=last;++cp)addCodepoint(out,seen,cp,font,rtl,scale);}
-void addText(std::vector<Token>& out,std::set<std::wstring>& seen,std::u32string_view text,int font,float scale=1.0f){for(char32_t cp:text)addCodepoint(out,seen,cp,font,false,scale);}
-void addWords(std::vector<Token>& out,const std::u32string& alphabet,std::uint32_t seed,int font,bool rtl,float scale){if(alphabet.empty())return;std::mt19937 rng(seed);std::uniform_int_distribution<int> len(3,7);std::uniform_int_distribution<std::size_t> pick(0,alphabet.size()-1);for(int n=0;n<72;++n){std::wstring word;int count=len(rng);for(int i=0;i<count;++i)word+=toWide(alphabet[pick(rng)]);out.push_back({std::move(word),0,true,false,rtl,font,scale});}}
+void addCodepoint(std::vector<Token>& out,std::set<std::wstring>& seen,char32_t cp,int font,bool rtl=false,float scale=1.0f,bool family=false){auto s=toWide(cp);if(s.empty())return;std::wstring key=std::to_wstring(font)+L"|"+s;if(!seen.insert(key).second)return;out.push_back({std::move(s),cp,false,isNumber(cp),rtl,family,font,scale});}
+void addRange(std::vector<Token>& out,std::set<std::wstring>& seen,char32_t first,char32_t last,int font,bool rtl=false,float scale=1.0f,bool family=false){for(char32_t cp=first;cp<=last;++cp)addCodepoint(out,seen,cp,font,rtl,scale,family);}
+void addText(std::vector<Token>& out,std::set<std::wstring>& seen,std::u32string_view text,int font,float scale=1.0f,bool family=false){for(char32_t cp:text)addCodepoint(out,seen,cp,font,false,scale,family);}
+void addWords(std::vector<Token>& out,const std::u32string& alphabet,std::uint32_t seed,int font,bool rtl,float scale,bool family=true){if(alphabet.empty())return;std::mt19937 rng(seed);std::uniform_int_distribution<int> len(3,7);std::uniform_int_distribution<std::size_t> pick(0,alphabet.size()-1);for(int n=0;n<72;++n){std::wstring word;int count=len(rng);for(int i=0;i<count;++i)word+=toWide(alphabet[pick(rng)]);out.push_back({std::move(word),0,true,false,rtl,family,font,scale});}}
 HRESULT drawText(HDC dc,const Token& token){if(token.text.empty())return E_INVALIDARG;SCRIPT_STRING_ANALYSIS analysis=nullptr;DWORD flags=SSA_GLYPHS|SSA_FALLBACK|SSA_LINK;if(token.rtl)flags|=SSA_RTL;HRESULT hr=ScriptStringAnalyse(dc,token.text.c_str(),(int)token.text.size(),0,-1,flags,kAtlasW,nullptr,nullptr,nullptr,nullptr,nullptr,&analysis);if(FAILED(hr))return hr;const SIZE* extent=ScriptString_pSize(analysis);int x=extent?std::max(0,(kAtlasW-(int)extent->cx)/2):0;int y=extent?std::max(0,(kAtlasH-(int)extent->cy)/2):0;hr=ScriptStringOut(analysis,x,y,0,nullptr,0,-1,FALSE);ScriptStringFree(&analysis);return hr;}
-std::wstring makeKey(const AsciiParams& p){std::wstring k=std::to_wstring((int)p.characterSet)+L"|"+std::to_wstring(p.ancientFont)+L"|"+std::to_wstring(p.englishFont)+L"|"+std::to_wstring(p.arabicFont)+L"|"+std::to_wstring(p.randomSeed)+L"|"+std::to_wstring(p.arabicNumberStyle);const bool f[]={p.randomWords,p.ancientLetters,p.ancientNumbers,p.ancientWords,p.englishLetters,p.englishNumbers,p.englishWords,p.arabicLetters,p.arabicNumbers,p.arabicWords,p.useAncientSize,p.useEnglishSize,p.useArabicSize};for(bool v:f)k+=v?L"1":L"0";k+=L"|"+std::to_wstring((int)std::lround(p.ancientSize))+L"|"+std::to_wstring((int)std::lround(p.englishSize))+L"|"+std::to_wstring((int)std::lround(p.arabicSize));return k;}
+std::wstring makeKey(const AsciiParams& p){const bool ancient=p.ancientLetters||p.ancientNumbers||p.ancientWords,english=p.englishLetters||p.englishNumbers||p.englishWords,arabic=p.arabicLetters||p.arabicNumbers||p.arabicWords;const int cs=(p.characterSet>=AsciiCharacterSetId::S1Braille&&p.characterSet<=AsciiCharacterSetId::S1BoxDrawing)?(int)p.characterSet:-1;std::wstring k=std::to_wstring(cs)+L"|"+std::to_wstring(ancient?p.ancientFont:0)+L"|"+std::to_wstring(english?p.englishFont:0)+L"|"+std::to_wstring(arabic?p.arabicFont:0)+L"|"+std::to_wstring(p.randomSeed)+L"|"+std::to_wstring(arabic&&p.arabicNumbers?p.arabicNumberStyle:0);const bool f[]={p.randomWords,p.ancientLetters,p.ancientNumbers,p.ancientWords,p.englishLetters,p.englishNumbers,p.englishWords,p.arabicLetters,p.arabicNumbers,p.arabicWords,p.useAncientSize,p.useEnglishSize,p.useArabicSize};for(bool v:f)k+=v?L"1":L"0";k+=L"|"+std::to_wstring((int)std::lround(p.ancientSize))+L"|"+std::to_wstring((int)std::lround(p.englishSize))+L"|"+std::to_wstring((int)std::lround(p.arabicSize));return k;}
 std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  std::vector<Token> tokens;std::set<std::wstring> seen;
  const int ancientFont=resourceFor(0,p.ancientFont),englishFont=resourceFor(1,p.englishFont),arabicFont=resourceFor(2,p.arabicFont);
  const float ancientScale=p.useAncientSize?std::clamp(p.ancientSize/100.0f,.1f,3.0f):1.0f;
  const float englishScale=p.useEnglishSize?std::clamp(p.englishSize/100.0f,.1f,3.0f):1.0f;
  const float arabicScale=p.useArabicSize?std::clamp(p.arabicSize/100.0f,.1f,3.0f):1.0f;
- addText(tokens,seen,asciiCharacterSetCodepoints(p.characterSet),englishFont,englishScale);
- switch(p.characterSet){case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF,englishFont);break;case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6,englishFont);break;case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F,englishFont);break;case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F,englishFont);break;case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F,englishFont);break;default:break;}
+ for(int id=0;id<=18;++id)addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),0);
+ for(int id=24;id<=26;++id)addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),0);
+ switch(p.characterSet){case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF,0);break;case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6,0);break;case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F,0);break;case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F,0);break;case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F,0);break;default:break;}
  const std::u32string ancient=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψωᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
  const std::u32string english=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
  const std::u32string arabic=U"ءآأؤإئابةتثجحخدذرزسشصضطظعغفقكلمنهوىي";
- if(p.ancientLetters){addText(tokens,seen,ancient,ancientFont,ancientScale);addRange(tokens,seen,0x1681,0x169A,ancientFont,false,ancientScale);addRange(tokens,seen,0x10330,0x1034A,ancientFont,false,ancientScale);addRange(tokens,seen,0x10900,0x10915,ancientFont,false,ancientScale);}
- if(p.ancientNumbers)addText(tokens,seen,U"ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫ",ancientFont,ancientScale);
- if(p.ancientWords)addWords(tokens,ancient,p.randomSeed^0xA11CEu,ancientFont,false,ancientScale);
- if(p.englishLetters)addText(tokens,seen,english,englishFont,englishScale);
- if(p.englishNumbers)addText(tokens,seen,U"0123456789",englishFont,englishScale);
- if(p.englishWords)addWords(tokens,english,p.randomSeed^0xE61A5u,englishFont,false,englishScale);
- if(p.arabicLetters)addText(tokens,seen,arabic,arabicFont,arabicScale);
- if(p.arabicNumbers){if(p.arabicNumberStyle==1)addText(tokens,seen,U"۰۱۲۳۴۵۶۷۸۹",arabicFont,arabicScale);else if(p.arabicNumberStyle==2)addText(tokens,seen,U"0123456789",arabicFont,arabicScale);else addText(tokens,seen,U"٠١٢٣٤٥٦٧٨٩",arabicFont,arabicScale);}
- if(p.arabicWords)addWords(tokens,arabic,p.randomSeed^0xA2AB1Cu,arabicFont,true,arabicScale);
+ if(p.ancientLetters){addText(tokens,seen,ancient,ancientFont,ancientScale,true);addRange(tokens,seen,0x1681,0x169A,ancientFont,false,ancientScale,true);addRange(tokens,seen,0x10330,0x1034A,ancientFont,false,ancientScale,true);addRange(tokens,seen,0x10900,0x10915,ancientFont,false,ancientScale,true);}
+ if(p.ancientNumbers)addText(tokens,seen,U"ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫ",ancientFont,ancientScale,true);
+ if(p.ancientWords)addWords(tokens,ancient,p.randomSeed^0xA11CEu,ancientFont,false,ancientScale,true);
+ if(p.englishLetters)addText(tokens,seen,english,englishFont,englishScale,true);
+ if(p.englishNumbers)addText(tokens,seen,U"0123456789",englishFont,englishScale,true);
+ if(p.englishWords)addWords(tokens,english,p.randomSeed^0xE61A5u,englishFont,false,englishScale,true);
+ if(p.arabicLetters)addText(tokens,seen,arabic,arabicFont,arabicScale,true);
+ if(p.arabicNumbers){if(p.arabicNumberStyle==1)addText(tokens,seen,U"۰۱۲۳۴۵۶۷۸۹",arabicFont,arabicScale,true);else if(p.arabicNumberStyle==2)addText(tokens,seen,U"0123456789",arabicFont,arabicScale,true);else addText(tokens,seen,U"٠١٢٣٤٥٦٧٨٩",arabicFont,arabicScale,true);}
+ if(p.arabicWords)addWords(tokens,arabic,p.randomSeed^0xA2AB1Cu,arabicFont,true,arabicScale,true);
  if(p.randomWords&&std::none_of(tokens.begin(),tokens.end(),[](const Token& t){return t.word;})){
-  std::u32string pool;int font=englishFont;float scale=englishScale;bool rtl=false;
-  for(const auto& t:tokens)if(t.codepoint&&!t.word&&!t.number){pool.push_back(t.codepoint);font=t.fontResource;scale=t.sizeScale;rtl=t.rtl;}
-  if(pool.empty())pool=english;addWords(tokens,pool,p.randomSeed^0x574F5244u,font,rtl,scale);
+  const std::u32string pool=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  addWords(tokens,pool,p.randomSeed^0x574F5244u,0,false,1.0f,false);
  }
- HMODULE module=nullptr;GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&buildGlyphAtlas),&module);
  HDC dc=CreateCompatibleDC(nullptr);if(!dc)return builtinAsciiGlyphAtlas();
  BITMAPINFO bmi{};bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);bmi.bmiHeader.biWidth=kAtlasW;bmi.bmiHeader.biHeight=-kAtlasH;bmi.bmiHeader.biPlanes=1;bmi.bmiHeader.biBitCount=32;bmi.bmiHeader.biCompression=BI_RGB;void* bits=nullptr;HBITMAP bitmap=CreateDIBSection(dc,&bmi,DIB_RGB_COLORS,&bits,nullptr,0);
  if(!bitmap||!bits){if(bitmap)DeleteObject(bitmap);DeleteDC(dc);return builtinAsciiGlyphAtlas();}
@@ -91,10 +90,11 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  const std::wstring fallback[]={L"Segoe UI Symbol",L"Segoe UI",L"Arial",L"Tahoma"};
  for(const auto& token:tokens){
   std::wstring preferred=fontFace(token.fontResource);HFONT chosen=nullptr;HGDIOBJ oldFont=nullptr;bool found=false;
-  std::array<std::wstring,5> faces{preferred,fallback[0],fallback[1],fallback[2],fallback[3]};
+  const bool japanese=token.codepoint>=0x3040&&token.codepoint<=0x30FF;
+  std::array<std::wstring,7> faces=japanese?std::array<std::wstring,7>{L"Yu Gothic UI",L"Meiryo",preferred,fallback[0],fallback[1],fallback[2],fallback[3]}:std::array<std::wstring,7>{preferred,fallback[0],fallback[1],fallback[2],fallback[3],L"Yu Gothic UI",L"Meiryo"};
   for(const auto& face:faces){HFONT f=CreateFontW(token.word?-12:-20,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_TT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH|FF_DONTCARE,face.c_str());if(!f)continue;HGDIOBJ prior=SelectObject(dc,f);if(hasGlyph(dc,token.text)){chosen=f;oldFont=prior;found=true;break;}SelectObject(dc,prior);DeleteObject(f);}
   if(!found)continue;std::memset(bits,0,kAtlasW*kAtlasH*4);if(FAILED(drawText(dc,token))){SelectObject(dc,oldFont);DeleteObject(chosen);continue;}
-  GlyphBitmap g;g.codepoint=token.codepoint;g.wordToken=token.word;g.numberToken=token.number;g.sizeScale=token.sizeScale;g.width=kAtlasW;g.height=kAtlasH;g.coverage.resize(kAtlasW*kAtlasH);const auto* px=(const std::uint8_t*)bits;std::uint64_t sum=0;
+  GlyphBitmap g;g.codepoint=token.codepoint;g.wordToken=token.word;g.numberToken=token.number;g.familyToken=token.family;g.sizeScale=token.sizeScale;g.width=kAtlasW;g.height=kAtlasH;g.coverage.resize(kAtlasW*kAtlasH);const auto* px=(const std::uint8_t*)bits;std::uint64_t sum=0;
   for(int i=0;i<kAtlasW*kAtlasH;++i){auto v=px[i*4+2];g.coverage[(std::size_t)i]=v;sum+=v;}
   if(sum){int minX=kAtlasW,minY=kAtlasH,maxX=-1,maxY=-1;for(int yy=0;yy<kAtlasH;++yy)for(int xx=0;xx<kAtlasW;++xx)if(g.coverage[(std::size_t)yy*kAtlasW+xx]>8){minX=std::min(minX,xx);minY=std::min(minY,yy);maxX=std::max(maxX,xx);maxY=std::max(maxY,yy);}
    if(maxX>=minX&&maxY>=minY){int cw=maxX-minX+1,ch=maxY-minY+1;std::vector<std::uint8_t> crop((std::size_t)cw*ch);std::uint64_t total=0;for(int yy=0;yy<ch;++yy)for(int xx=0;xx<cw;++xx){auto v=g.coverage[(std::size_t)(minY+yy)*kAtlasW+minX+xx];crop[(std::size_t)yy*cw+xx]=v;total+=v;}g.width=cw;g.height=ch;g.coverage=std::move(crop);sum=total;}
