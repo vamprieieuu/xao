@@ -16,7 +16,7 @@ The original `XAO.zip` was materialized and extracted. It contains 996 archive e
 - Array settings walkthrough: 828×1792, 240 fps, 866 frames, 19.862 s.
 - Mosaic ASCII: 296×368, 60 fps, 195 frames, 3.833 s.
 
-The temporal contact sheets are evidence for visible structure and motion. They do not prove proprietary shader equations or exact undisclosed algorithms. The findings below distinguish directly visible behavior from implementation inference.
+The initial temporal contact sheets sampled the nine recordings at 2 frames/second. A supplementary pass sampled the eight short effect clips at 5 frames/second (166 frames total) and rechecked the Array settings walkthrough at 2 frames/second (40 frames). These samples improve visibility of changing glyph populations, color/glow movement and UI states, but are still temporal samples rather than an inspection of every encoded frame. Contact sheets are evidence for visible structure and motion; they do not prove proprietary shader equations or exact undisclosed algorithms. The findings below distinguish directly visible behavior from implementation inference.
 
 ## 2. Main Ideas visual findings
 
