@@ -21,7 +21,7 @@ int main(){
  if(xao::asciiCharacterSetCodepoints(xao::AsciiCharacterSetId::S1BoxDrawing).size()!=6)return fail("S1 box drawing codepoints");
  if(xao::asciiCharacterSetCodepoints(xao::AsciiCharacterSetId::AsciiArtMainSimple).size()!=5)return fail("ASCII Art main simple ramp");
  if(xao::asciiCharacterSetCodepoints(xao::AsciiCharacterSetId::AsciiArtMainStandard).size()!=10)return fail("ASCII Art main standard ramp");
- if(xao::asciiCharacterSetCodepoints(xao::AsciiCharacterSetId::AsciiArtMainDetailed).size()!=69)return fail("ASCII Art main detailed ramp");
+ if(xao::asciiCharacterSetCodepoints(xao::AsciiCharacterSetId::AsciiArtMainDetailed).size()!=70)return fail("ASCII Art main detailed ramp");
  const auto* gb=xao::s1Palette(xao::S1PaletteId::GameBoyDMG);if(!gb||gb->count!=4||gb->colors[0].r!=0x0F||gb->colors[3].b!=0x81)return fail("S1 palette byte recovery");
  // A word-only atlas must remain usable independently of the global Random Words toggle.
  xao::AsciiParams wordOnly;wordOnly.colorize=false;wordOnly.randomWords=true;wordOnly.randomCharacters=false;
