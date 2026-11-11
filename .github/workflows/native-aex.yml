@@ -46,7 +46,20 @@ jobs:
       dumpbin /headers /exports /dependents $aex.FullName
    - uses: actions/upload-artifact@v4
      name: Upload XAO AEX
+     id: upload_aex
      with:
       name: XAO_ASCII_AE2023_Windows_x64
       path: build/bin/Release/XAO_ASCII.aex
       if-no-files-found: error
+      retention-days: 30
+   - name: Publish direct download entry
+     if: success()
+     shell: pwsh
+     env:
+      ARTIFACT_URL: ${{ steps.upload_aex.outputs.artifact-url }}
+     run: |
+      if (-not $env:ARTIFACT_URL) { throw "GitHub did not return the uploaded artifact URL." }
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## XAO plugin download"
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Download XAO_ASCII.aex]($env:ARTIFACT_URL)"
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "The download contains the verified XAO_ASCII.aex file."
