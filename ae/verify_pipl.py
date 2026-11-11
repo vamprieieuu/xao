@@ -7,7 +7,7 @@ from pathlib import Path
 
 def pstr(value: bytes) -> bytes:
     data = bytes([len(value)]) + value
-    return data + b"\\0" * ((-len(data)) % 4)
+    return data + b"\0" * ((-len(data)) % 4)
 
 EXPECTED = {
     b"dnik": b"TKFe",
