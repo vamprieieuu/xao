@@ -182,3 +182,96 @@ ASCII is complete only when:
 The current core ASCII engine is only an early 10-mask 5×7 renderer and the AE adapter exposes a small set of basic controls. It does not meet the ASCII completion gate. The full audit is in docs/XAO_ASCII_FULL_REFERENCE_AND_IMPLEMENTATION_AUDIT_2026-11-11.md.
 
 This is a living specification. When the user supplies more notes, especially the advanced color/gradient system, update this file before changing implementation assumptions.
+
+
+---
+
+## ASCII Engine — User Requirements Captured 2026-11-11 (Draft, awaiting further visual notes)
+
+This section records the user's direct requirements. It is not the final complete product specification; the user may add more after reviewing the Main Ideas clips.
+
+### Default interface and engine
+- The plugin identity is **XAO**.
+- ASCII is the first/default interface and the default engine when the effect is applied.
+- The ASCII interface must open with a prominent **Plugin Presets** selector for fast one-click looks.
+- This is a complete production engine requirement, not a request for a prototype, demo, or placeholder UI. A preset must produce a real rendered result, and its exposed controls must work.
+
+### Crates ASCII preset family
+Recreate these exact preset names as XAO presets, based on the supplied Crates ASCII reference and recovered parameter data:
+1. Default
+2. Alien Signal
+3. Circles and Dots
+4. Classic
+5. Corrupted
+6. Crossword
+7. Diamond
+8. Matrix
+9. Motherboard
+10. Pink Shapes
+
+The supplied reference preset metadata and parameter combinations are recorded in the ASCII audit. Reproduce their visual behavior independently; use supplied source/approximate source files where their provenance and license permit, and do not merely copy names while leaving the presets visually identical. Add further original XAO presets after the reference set.
+
+### S1 ASCII Art — priority reference
+Use S1 ASCII Art as a second major source:
+- Recover and integrate its Character Sets alongside the Crates sets.
+- Preserve its distinct character-set behavior and provide detailed independent controls.
+- Carry over the exact S1 palette colors recovered from the supplied binary.
+- Recreate the Monochrome, Source Color, and Palette color modes as part of the later advanced color system. The user will explain the desired final color architecture later; do not finalize color UI or behavior before that explanation.
+
+Exact recovered S1 set data and RGB8 palette stops are documented in:
+`docs/S1_ASCII_REFERENCE_RECOVERY_2026-11-11.md`
+and stored in:
+`core/include/xao/AsciiReferencePalettes.h`
+
+### Character libraries and mixed content
+Provide independently mixable libraries:
+- **Ancient:** historic/ornamental/strange glyphs, symbols, signals, and matrix-like sets.
+- **English:** English letters, numbers, and words.
+- **Arabic:** Arabic letters, Arabic numerals, and words.
+
+For each library, allow independent selection of Letters, Numbers, and Words. Users must be able to combine categories across libraries (e.g. Arabic letters + English numbers + Ancient words), not be restricted to one language at a time. Do not add the previously proposed curated Arabic Word Library taxonomy; the user rejected that idea.
+
+### Character and typography controls
+Provide real controls for:
+- Character Set
+- Character Size
+- Number Size
+- Character Margins
+- Cell Margins
+- Anti-Aliasing
+- Glyph/character density and variation
+- Font family where useful; font selection is secondary to character-set fidelity.
+
+The character sets from both Crates ASCII and S1 ASCII Art must be available in XAO. The supplied fonts folder should be inspected and used where it materially improves the result, but do not prioritize font choice above character-set behavior.
+
+### Animation and randomness
+Provide independent controls for:
+- Random Characters
+- Random Words
+- Random Timing
+
+Also expose meaningful speed, amount/variation, and deterministic seed controls. Randomized characters and words should actually change over time. Random Timing should vary per-cell change timing rather than merely enabling a global synchronous swap.
+
+### Implementation and reuse directive
+The user explicitly requests that the supplied source/approximate-source files and open-source projects be used as actual implementation inputs, not merely read and summarized. Inspect the files, isolate reusable components/algorithms, and integrate compatible parts into the XAO ASCII engine. Verify provenance, licenses, dependencies, and compatibility before copying or porting. Do not blindly paste decompiled proprietary code or import incompatible copyleft code into a closed-source build. Preserve the MAJEED boundary: build/SDK architecture only, never its effects or algorithms.
+
+### Required reference batch
+When the user authorizes the full phase, analyze all Main Ideas clips and the supplied ASCII references in one comprehensive pass, including:
+- ASCII Main and all Main Ideas videos/stills
+- Crates ASCII and its AEX/decompilation/source approximation
+- S1 ASCII Art and its AEX/decompilation
+- ASCII Art Main open-source project
+- ASCII OFX
+- AuraASCII
+- Glyphblocks OFX
+- Morphing ASCII Shader
+- Pointless (GPL-3.0; inspect only unless its license obligations are deliberately accepted)
+- All other relevant ASCII AEX/C++ references, including OVN ASCII and L3tt3rM4pp3r2
+
+The user does not want to be asked to explain each clip. The assistant must analyze the clips and visual references directly, compare Before/After, study motion over time, and document the visual and technical findings.
+
+### Delivery standard
+- Do not declare the ASCII engine complete after an inventory, partial implementation, or successful compile alone.
+- Deliver a complete, fully functioning final ASCII engine with all agreed controls and presets implemented.
+- Verify native build and structural PiPL/exports. Then test inside After Effects 2023 / 23.2.1 for actual application, rendering, UI, and stability before claiming full runtime acceptance.
+- Do not send micro-progress reports. Complete the full analysis/implementation phase and then provide one substantial report with the tested build and limitations clearly stated.
