@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(XAO LANGUAGES C CXX)
 option(XAO_BUILD_TESTS "Build XAO core tests" ON)
-option(XAO_BUILD_AE_PLUGIN "Build native AE plug-in" ON)
+option(XAO_BUILD_AE_PLUGIN "Build native AE plug-in" OFF)
 set(XAO_AE_SDK_ROOT "" CACHE PATH "Adobe After Effects SDK root")
 add_library(xao_core STATIC core/src/Image.cpp core/src/Compositor.cpp core/src/Pipeline.cpp core/src/AsciiEngine.cpp)
 target_include_directories(xao_core PUBLIC core/include)
