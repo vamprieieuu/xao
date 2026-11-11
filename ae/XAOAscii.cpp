@@ -43,18 +43,84 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){PF_ParamDef def;AEFX_CLR_STRUC
  PF_ADD_FLOAT_SLIDERX("Brightness",-1,1,-1,1,0,PF_Precision_TENTHS,0,0,P_BRIGHTNESS);
  PF_ADD_CHECKBOXX("Invert",0,0,P_INVERT);PF_ADD_CHECKBOXX("Colorize",1,0,P_COLORIZE);
  PF_ADD_POPUPX("Input transfer",3,1,"Linear|Rec.709|sRGB",0,P_TRANSFER);out->num_params=P_COUNT;return PF_Err_NONE;}
-PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){PF_Err err=PF_Err_NONE;auto* s=new(std::nothrow)State();if(!s)return PF_Err_OUT_OF_MEMORY;PF_ParamDef d;AEFX_CLR_STRUCT(d);
-#define GET(i,field,expr) do{ERR(PF_CHECKOUT_PARAM(in,i,in->current_time,in->time_step,in->time_scale,&d));if(!err){field=(expr);}ERR(PF_CHECKIN_PARAM(in,&d));}while(0)
- GET(P_CELL,s->ascii.cellSize,static_cast<int>(d.u.fs_d.value));GET(P_SCALE,s->ascii.glyphScale,static_cast<float>(d.u.fs_d.value));GET(P_CONTRAST,s->ascii.contrast,static_cast<float>(d.u.fs_d.value));GET(P_BRIGHTNESS,s->ascii.brightness,static_cast<float>(d.u.fs_d.value));GET(P_INVERT,s->ascii.invert,d.u.bd.value!=0);GET(P_COLORIZE,s->ascii.colorize,d.u.bd.value!=0);GET(P_TRANSFER,s->transfer,d.u.pd.value);
-#undef GET
- if(err){delete s;return err;}PF_RenderRequest req=e->input->output_request;req.rect.left=0;req.rect.top=0;req.rect.right=in->width;req.rect.bottom=in->height;req.channel_mask=PF_ChannelMask_ARGB;PF_CheckoutResult cr;AEFX_CLR_STRUCT(cr);
- ERR(e->cb->checkout_layer(in->effect_ref,P_INPUT,0,&req,in->current_time,in->time_step,in->time_scale,&cr));if(err){delete s;return err;}
- PF_LRect requested=e->input->output_request.rect;PF_LRect actual;actual.left=std::max(cr.result_rect.left,requested.left);actual.top=std::max(cr.result_rect.top,requested.top);actual.right=std::min(cr.result_rect.right,requested.right);actual.bottom=std::min(cr.result_rect.bottom,requested.bottom);if(actual.right<actual.left)actual.right=actual.left;if(actual.bottom<actual.top)actual.bottom=actual.top;e->output->result_rect=actual;e->output->max_result_rect=cr.max_result_rect;e->output->solid=FALSE;e->output->pre_render_data=s;e->output->delete_pre_render_data_func=DeleteState;return PF_Err_NONE;}
-PF_Err Smart(PF_InData* in,PF_OutData* out,PF_SmartRenderExtra* e){PF_Err err=PF_Err_NONE;PF_EffectWorld *src=nullptr,*dst=nullptr;auto* st=static_cast<const State*>(e->input->pre_render_data);if(!st)return PF_Err_BAD_CALLBACK_PARAM;
- ERR(e->cb->checkout_layer_pixels(in->effect_ref,0,&src));ERR(e->cb->checkout_output(in->effect_ref,&dst));if(err)return err;AEFX_SuiteScoper<PF_WorldSuite2> ws(in,kPFWorldSuite,kPFWorldSuiteVersion2,out);PF_PixelFormat f=PF_PixelFormat_INVALID;ERR(ws->PF_GetPixelFormat(src,&f));if(err)return err;
- xao::RenderContext c;c.timeSeconds=in->time_scale?in->current_time/static_cast<double>(in->time_scale):0.0;c.frame=in->time_step?in->current_time/in->time_step:0;c.renderScale=in->downsample_x.den?static_cast<float>(in->downsample_x.num)/in->downsample_x.den:1.f;
- switch(f){case PF_PixelFormat_ARGB32:err=Render<PF_Pixel>(src,dst,*st,255.f,c);break;case PF_PixelFormat_ARGB64:err=Render<PF_Pixel16>(src,dst,*st,32768.f,c);break;case PF_PixelFormat_ARGB128:err=Render<PF_PixelFloat>(src,dst,*st,1.f,c);break;default:err=PF_Err_UNRECOGNIZED_PARAM_TYPE;}
- PF_Err ci=e->cb->checkin_layer_pixels(in->effect_ref,0);return err?err:ci;}
+PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
+ if(!in||!e||!e->input||!e->output||!e->cb)return PF_Err_BAD_CALLBACK_PARAM;
+ PF_Err err=PF_Err_NONE;
+ auto* state=new(std::nothrow)State();
+ if(!state)return PF_Err_OUT_OF_MEMORY;
+ auto readParam=[&](A_long index,auto apply){
+  if(err!=PF_Err_NONE)return;
+  PF_ParamDef param;AEFX_CLR_STRUCT(param);
+  PF_Err checkout=PF_CHECKOUT_PARAM(in,index,in->current_time,in->time_step,in->time_scale,&param);
+  if(checkout!=PF_Err_NONE){err=checkout;return;}
+  apply(param);
+  PF_Err checkin=PF_CHECKIN_PARAM(in,&param);
+  if(checkin!=PF_Err_NONE)err=checkin;
+ };
+ readParam(P_CELL,[&](PF_ParamDef& p){state->ascii.cellSize=static_cast<int>(p.u.fs_d.value);});
+ readParam(P_SCALE,[&](PF_ParamDef& p){state->ascii.glyphScale=static_cast<float>(p.u.fs_d.value);});
+ readParam(P_CONTRAST,[&](PF_ParamDef& p){state->ascii.contrast=static_cast<float>(p.u.fs_d.value);});
+ readParam(P_BRIGHTNESS,[&](PF_ParamDef& p){state->ascii.brightness=static_cast<float>(p.u.fs_d.value);});
+ readParam(P_INVERT,[&](PF_ParamDef& p){state->ascii.invert=p.u.bd.value!=0;});
+ readParam(P_COLORIZE,[&](PF_ParamDef& p){state->ascii.colorize=p.u.bd.value!=0;});
+ readParam(P_TRANSFER,[&](PF_ParamDef& p){state->transfer=p.u.pd.value;});
+ if(err!=PF_Err_NONE){delete state;return err;}
+ PF_RenderRequest request=e->input->output_request;
+ request.rect.left=0;request.rect.top=0;request.rect.right=in->width;request.rect.bottom=in->height;
+ request.channel_mask=PF_ChannelMask_ARGB;
+ PF_CheckoutResult checkoutResult;AEFX_CLR_STRUCT(checkoutResult);
+ err=e->cb->checkout_layer(in->effect_ref,P_INPUT,0,&request,in->current_time,in->time_step,in->time_scale,&checkoutResult);
+ if(err!=PF_Err_NONE){delete state;return err;}
+ const PF_LRect requested=e->input->output_request.rect;
+ PF_LRect actual;
+ actual.left=std::max(checkoutResult.result_rect.left,requested.left);
+ actual.top=std::max(checkoutResult.result_rect.top,requested.top);
+ actual.right=std::min(checkoutResult.result_rect.right,requested.right);
+ actual.bottom=std::min(checkoutResult.result_rect.bottom,requested.bottom);
+ if(actual.right<actual.left)actual.right=actual.left;
+ if(actual.bottom<actual.top)actual.bottom=actual.top;
+ e->output->result_rect=actual;
+ e->output->max_result_rect=checkoutResult.max_result_rect;
+ e->output->solid=FALSE;
+ e->output->pre_render_data=state;
+ e->output->delete_pre_render_data_func=DeleteState;
+ return PF_Err_NONE;
 }
-extern "C" DllExport PF_Err PluginDataEntryFunction2(void*,void*,void*,const char*,const char*){return PF_Err_NONE;}
-extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,PF_InData* in_data,PF_OutData* out_data,PF_ParamDef*[],PF_LayerDef*,void* extra){try{switch(cmd){case PF_Cmd_ABOUT:PF_SPRINTF(out_data->return_msg,"XAO ASCII 1.0\rNative CPU ASCII renderer");return PF_Err_NONE;case PF_Cmd_GLOBAL_SETUP:return Global(out_data);case PF_Cmd_PARAMS_SETUP:return Params(in_data,out_data);case PF_Cmd_SMART_PRE_RENDER:return Pre(in_data,out_data,static_cast<PF_PreRenderExtra*>(extra));case PF_Cmd_SMART_RENDER:return Smart(in_data,out_data,static_cast<PF_SmartRenderExtra*>(extra));default:return PF_Err_NONE;}}catch(...){return PF_Err_INTERNAL_STRUCT_DAMAGED;}}
+PF_Err Smart(PF_InData* in,PF_OutData* out,PF_SmartRenderExtra* e){
+ if(!in||!out||!e||!e->cb||!e->input)return PF_Err_BAD_CALLBACK_PARAM;
+ const auto* state=static_cast<const State*>(e->input->pre_render_data);
+ if(!state)return PF_Err_BAD_CALLBACK_PARAM;
+ PF_EffectWorld* src=nullptr;
+ PF_EffectWorld* dst=nullptr;
+ PF_Err err=e->cb->checkout_layer_pixels(in->effect_ref,P_INPUT,&src);
+ if(err!=PF_Err_NONE)return err;
+ err=e->cb->checkout_output(in->effect_ref,&dst);
+ if(err!=PF_Err_NONE){
+  if(e->cb->checkin_layer_pixels)e->cb->checkin_layer_pixels(in->effect_ref,P_INPUT);
+  return err;
+ }
+ if(!src||!dst||!src->data||!dst->data||src->width<=0||src->height<=0||dst->width<0||dst->height<0){
+  err=PF_Err_BAD_CALLBACK_PARAM;
+ }else{
+  AEFX_SuiteScoper<PF_WorldSuite2> worldSuite(in,kPFWorldSuite,kPFWorldSuiteVersion2,out);
+  PF_PixelFormat format=PF_PixelFormat_INVALID;
+  err=worldSuite->PF_GetPixelFormat(src,&format);
+  if(err==PF_Err_NONE){
+   xao::RenderContext context;
+   context.timeSeconds=in->time_scale?in->current_time/static_cast<double>(in->time_scale):0.0;
+   context.frame=in->time_step?in->current_time/in->time_step:0;
+   context.renderScale=in->downsample_x.den?static_cast<float>(in->downsample_x.num)/in->downsample_x.den:1.f;
+   switch(format){
+    case PF_PixelFormat_ARGB32:err=Render<PF_Pixel>(src,dst,*state,255.f,context);break;
+    case PF_PixelFormat_ARGB64:err=Render<PF_Pixel16>(src,dst,*state,32768.f,context);break;
+    case PF_PixelFormat_ARGB128:err=Render<PF_PixelFloat>(src,dst,*state,1.f,context);break;
+    default:err=PF_Err_UNRECOGNIZED_PARAM_TYPE;break;
+   }
+  }
+ }
+ PF_Err checkin=e->cb->checkin_layer_pixels?e->cb->checkin_layer_pixels(in->effect_ref,P_INPUT):PF_Err_NONE;
+ return err!=PF_Err_NONE?err:checkin;
+}
+}
+extern "C" DllExport PF_Err PluginDataEntryFunction2(void* pica_basicP,PF_PluginDataCB2 pica_add_piPL,SPBasicSuite* pica_basic_suite,const char* host_name,const char* host_version){(void)pica_basicP;(void)pica_add_piPL;(void)pica_basic_suite;(void)host_name;(void)host_version;return PF_Err_NONE;}
+extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,PF_InData* in_data,PF_OutData* out_data,PF_ParamDef*[],PF_LayerDef*,void* extra){try{switch(cmd){case PF_Cmd_ABOUT:PF_SPRINTF(out_data->return_msg,"XAO ASCII 1.0\rNative CPU ASCII renderer");return PF_Err_NONE;case PF_Cmd_GLOBAL_SETUP:return Global(out_data);case PF_Cmd_PARAMS_SETUP:return Params(in_data,out_data);case PF_Cmd_SMART_PRE_RENDER:return Pre(in_data,out_data,static_cast<PF_PreRenderExtra*>(extra));case PF_Cmd_SMART_RENDER:return Smart(in_data,out_data,static_cast<PF_SmartRenderExtra*>(extra));default:return PF_Err_NONE;}}catch(const std::bad_alloc&){return PF_Err_OUT_OF_MEMORY;}catch(...){return PF_Err_INTERNAL_STRUCT_DAMAGED;}}
