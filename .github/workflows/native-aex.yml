@@ -7,6 +7,7 @@ on:
  push:
   branches:
    - xao/recovery-baseline-2026-11-10
+   - xao/ascii-feedback-pass-2026-11-12
   paths:
    - 'CMakeLists.txt'
    - 'core/**'
