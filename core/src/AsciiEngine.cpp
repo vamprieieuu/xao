@@ -115,7 +115,8 @@ void applyCratesPreset(AsciiParams& p,AsciiPresetId id) noexcept{
  p.enableAncient=p.enableEnglish=p.enableArabic=false;
 }
 void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) const{
- if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");if(src.empty())return;
+ if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
+ if(src.empty())return;
  int w=src.width(),h=src.height(),cell=std::max(2,std::min(256,params_.cellSize));
  float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);
  float glyphScale=clampf(params_.glyphScale*(params_.characterSize/88.0f),.1f,1.5f);
