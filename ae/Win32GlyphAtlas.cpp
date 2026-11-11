@@ -77,7 +77,20 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
  const std::u32string ancientNumbers=U"ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫ";
  const std::u32string englishNumbers=U"0123456789";
  const std::u32string arabicNumbers=U"٠١٢٣٤٥٦٧٨٩";
- if(p.enableAncient){if(p.ancientLetters)for(char32_t cp:ancientLetters)addCodepoint(tokens,seen,cp);if(p.ancientNumbers)for(char32_t cp:ancientNumbers)addCodepoint(tokens,seen,cp);if(p.ancientWords)addWords(tokens,ancientLetters,p.randomSeed^0xA11CEu,false);}
+ if(p.enableAncient){
+  if(p.ancientLetters){
+   for(char32_t cp:ancientLetters)addCodepoint(tokens,seen,cp);
+   addRange(tokens,seen,0x1681,0x169A);   // Ogham
+   addRange(tokens,seen,0x10330,0x1034A); // Gothic
+   addRange(tokens,seen,0x10380,0x1039E); // Ugaritic
+   addRange(tokens,seen,0x103A0,0x103C3); // Old Persian
+   addRange(tokens,seen,0x10900,0x10915); // Phoenician
+   addRange(tokens,seen,0x12000,0x1203F); // Cuneiform sample block
+   addRange(tokens,seen,0x13000,0x1303F); // Egyptian hieroglyph sample block
+  }
+  if(p.ancientNumbers)for(char32_t cp:ancientNumbers)addCodepoint(tokens,seen,cp);
+  if(p.ancientWords)addWords(tokens,ancientLetters,p.randomSeed^0xA11CEu,false);
+ }
  if(p.enableEnglish){if(p.englishLetters)for(char32_t cp:englishLetters)addCodepoint(tokens,seen,cp);if(p.englishNumbers)for(char32_t cp:englishNumbers)addCodepoint(tokens,seen,cp);if(p.englishWords)addWords(tokens,englishLetters,p.randomSeed^0xE61A5u,false);}
  if(p.enableArabic){if(p.arabicLetters)for(char32_t cp:arabicLetters)addCodepoint(tokens,seen,cp,true);if(p.arabicNumbers)for(char32_t cp:arabicNumbers)addCodepoint(tokens,seen,cp,true);if(p.arabicWords)addWords(tokens,arabicLetters,p.randomSeed^0xA2AB1Cu,true);}
  if(p.randomWords&&std::none_of(tokens.begin(),tokens.end(),[](const Token& t){return t.word;})){
