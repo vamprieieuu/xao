@@ -54,7 +54,7 @@ template<class PX>PF_Err Render(const PF_EffectWorld* s,PF_EffectWorld* d,const 
  return PF_Err_NONE;
 }
 PF_Err Global(PF_OutData* o){o->my_version=PF_VERSION(1,1,0,PF_Stage_DEVELOP,1);o->out_flags=PF_OutFlag_DEEP_COLOR_AWARE;o->out_flags2=PF_OutFlag2_FLOAT_COLOR_AWARE|PF_OutFlag2_SUPPORTS_SMART_RENDER|PF_OutFlag2_SUPPORTS_THREADED_RENDERING;return PF_Err_NONE;}
-PF_Err Params(PF_InData*,PF_OutData* out){
+PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_TOPICX("ASCII Core",0,P_TOPIC_CORE);
  PF_ADD_POPUPX("ASCII Preset",21,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch",0,P_PRESET);
