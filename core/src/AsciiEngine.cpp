@@ -118,7 +118,8 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
- for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!g.familyToken&&!g.wordToken&&!set.empty()&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
+ auto inSelectedSet=[&](char32_t cp){switch(params_.characterSet){case AsciiCharacterSetId::S1Braille:return cp>=0x2800&&cp<=0x28FF;case AsciiCharacterSetId::S1Katakana:return cp>=0x30A1&&cp<=0x30F6;default:return !set.empty()&&set.find(cp)!=std::u32string_view::npos;}};
+ for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!g.familyToken&&!g.wordToken&&g.codepoint&&!inSelectedSet(g.codepoint))continue;candidates.push_back(&g);}
  int rampLimit=0;if(params_.characterSet==AsciiCharacterSetId::S1Classic)rampLimit=10;else if(params_.characterSet==AsciiCharacterSetId::S1Minimal)rampLimit=6;else if(params_.characterSet==AsciiCharacterSetId::S1Bourke)rampLimit=28;
  if(rampLimit>0){std::vector<const GlyphBitmap*> base;for(auto* g:candidates)if(!g->familyToken&&!g->wordToken)base.push_back(g);std::sort(base.begin(),base.end(),[](const GlyphBitmap* a,const GlyphBitmap* b){return a->density<b->density;});if((int)base.size()>rampLimit){base.resize((std::size_t)rampLimit);candidates.erase(std::remove_if(candidates.begin(),candidates.end(),[&](const GlyphBitmap* g){return !g->familyToken&&!g->wordToken&&std::find(base.begin(),base.end(),g)==base.end();}),candidates.end());}}
  if(candidates.empty()){dst=src;return;}
