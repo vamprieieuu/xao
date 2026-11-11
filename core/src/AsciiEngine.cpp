@@ -113,13 +113,15 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(params_.uniformLuma)for(float& v:target)v=mean;
   if(params_.reverseOrder)for(float& v:target)v=1-v;
   if(params_.invert)for(float& v:target)if(v>=clamp01(params_.invertThreshold/100.0f))v=1-v;
-  for(float& v:target){v=applyAsciiToneMap(v,contrast,brightness);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
+  const float gamma=clampf(params_.gamma,0.1f,4.0f);
+  for(float& v:target){v=std::pow(clamp01(applyAsciiToneMap(v,contrast,brightness)),1.0f/gamma);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
   std::uint32_t ci=(std::uint32_t)((y0/cell)*((w+cell-1)/cell)+(x0/cell));double time=std::max(0.0,ctx.timeSeconds);
   bool animate=params_.randomCharacters||params_.randomWords;
   std::uint32_t slot=animate?(std::uint32_t)std::floor(time*(1.0+clampf(params_.randomSpeed,0,10)*24.0)):0u;
   if(params_.randomTiming)slot+=hash32(params_.randomSeed^ci)%(1u+(std::uint32_t)(clampf(params_.randomTimingVariation,0,10)*12));
   std::uint32_t rv=hash32(params_.randomSeed^hash32(ci+0x9e3779b9u)^hash32(slot));
-  auto* glyph=selectGlyph(candidates,target,params_.shapeMatch,(params_.randomCharacters||params_.randomWords)?params_.randomAmount:0,rv);if(!glyph)continue;
+  const bool shapeMatch=params_.mappingMode==AsciiMappingMode::ShapeMatch||(params_.mappingMode==AsciiMappingMode::Auto&&params_.shapeMatch);
+  auto* glyph=selectGlyph(candidates,target,shapeMatch,(params_.randomCharacters||params_.randomWords)?params_.randomAmount:0,rv);if(!glyph)continue;
   float cw=(float)(x1-x0),ch=(float)(y1-y0),aw=cw*(1-cellMargin),ah=ch*(1-cellMargin);
   float numberScale=glyph->numberToken?clampf(params_.numberSize/100.0f,.1f,2.0f):1.0f;
   float dw=std::max(1.0f,aw*glyphScale*numberScale*(1-charMargin)),dh=std::max(1.0f,ah*glyphScale*numberScale*(1-charMargin));
