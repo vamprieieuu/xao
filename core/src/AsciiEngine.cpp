@@ -123,8 +123,13 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   for(float& v:target){v=std::pow(clamp01(applyAsciiToneMap(v,contrast,brightness)),1.0f/gamma);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
   std::uint32_t ci=(std::uint32_t)((y0/cell)*((w+cell-1)/cell)+(x0/cell));double time=std::max(0.0,ctx.timeSeconds);
   bool animate=params_.randomCharacters||params_.randomWords;
-  std::uint32_t slot=animate?(std::uint32_t)std::floor(time*(1.0+clampf(params_.randomSpeed,0,10)*24.0)):0u;
-  if(params_.randomTiming)slot+=hash32(params_.randomSeed^ci)%(1u+(std::uint32_t)(clampf(params_.randomTimingVariation,0,10)*12));
+  double cellSpeed=1.0+clampf(params_.randomSpeed,0,10)*24.0;
+  if(params_.randomTiming){
+   const float jitter=hash32(params_.randomSeed^ci^0x71A1u)/(float)0xFFFFFFFFu;
+   const float variation=clampf(params_.randomTimingVariation/10.0f,0,1);
+   cellSpeed*=1.0+(jitter*2.0f-1.0f)*variation*0.75f;
+  }
+  std::uint32_t slot=animate?(std::uint32_t)std::floor(time*cellSpeed):0u;
   std::uint32_t rv=hash32(params_.randomSeed^hash32(ci+0x9e3779b9u)^hash32(slot));
   const bool shapeMatch=params_.mappingMode==AsciiMappingMode::ShapeMatch||(params_.mappingMode==AsciiMappingMode::Auto&&params_.shapeMatch);
   const GlyphBitmap* glyph=nullptr;
