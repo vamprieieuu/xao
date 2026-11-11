@@ -94,8 +94,10 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
  if(p.enableEnglish){if(p.englishLetters)for(char32_t cp:englishLetters)addCodepoint(tokens,seen,cp);if(p.englishNumbers)for(char32_t cp:englishNumbers)addCodepoint(tokens,seen,cp);if(p.englishWords)addWords(tokens,englishLetters,p.randomSeed^0xE61A5u,false);}
  if(p.enableArabic){if(p.arabicLetters)for(char32_t cp:arabicLetters)addCodepoint(tokens,seen,cp,true);if(p.arabicNumbers)for(char32_t cp:arabicNumbers)addCodepoint(tokens,seen,cp,true);if(p.arabicWords)addWords(tokens,arabicLetters,p.randomSeed^0xA2AB1Cu,true);}
  if(p.randomWords&&std::none_of(tokens.begin(),tokens.end(),[](const Token& t){return t.word;})){
-  std::u32string pool;for(char32_t cp:asciiCharacterSetCodepoints(p.characterSet))if(!isNumber(cp))pool.push_back(cp);
-  if(pool.empty())pool=englishLetters;addWords(tokens,pool,p.randomSeed^0x574F5244u,false);
+  std::u32string pool;
+  for(const auto& token:tokens)if(token.codepoint&&!token.word&&!token.number)pool.push_back(token.codepoint);
+  if(pool.empty())pool=englishLetters;
+  addWords(tokens,pool,p.randomSeed^0x574F5244u,false);
  }
  if(tokens.empty())addText(tokens,seen,U"@#%&$ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
 
