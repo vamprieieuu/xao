@@ -228,26 +228,6 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    }
   }
   fg=scaled(fg,alpha);Pixel bg=params_.preserveCellAlpha?scaled(params_.paper,alpha):params_.paper;
-  bool glowCell=false;
-  if(params_.glowEnabled||styleGlow){
-   bool categoryMatch=true;
-   switch(params_.glowGlyphFilter){
-    case AsciiGlowGlyphFilter::Letters:categoryMatch=!glyph->wordToken&&!glyph->numberToken&&isLetterCodepoint(glyph->codepoint);break;
-    case AsciiGlowGlyphFilter::Numbers:categoryMatch=glyph->numberToken;break;
-    case AsciiGlowGlyphFilter::Symbols:categoryMatch=!glyph->wordToken&&!glyph->numberToken&&!isLetterCodepoint(glyph->codepoint);break;
-    case AsciiGlowGlyphFilter::Words:categoryMatch=glyph->wordToken;break;
-    default:break;
-   }
-   if(categoryMatch){
-    const float cx=((float)x0+(float)x1)*0.5f/(float)w,cy=((float)y0+(float)y1)*0.5f/(float)h;
-    const float dx=cx-clampf(params_.glowCenterX,0,1),dy=cy-clampf(params_.glowCenterY,0,1);
-    const float region=clampf(params_.glowRegionSize,0.01f,1.0f)*0.5f;
-    const bool inRegion=dx*dx+dy*dy<=region*region;
-    const float random=(hash32(rv^0x610A5u)/(float)0xFFFFFFFFu);
-    switch(params_.glowSelection){case AsciiGlowSelection::FixedRegion:glowCell=inRegion;break;case AsciiGlowSelection::RandomInRegion:glowCell=inRegion&&random<clamp01(params_.glowAmount);break;case AsciiGlowSelection::All:glowCell=true;break;default:glowCell=random<clamp01(params_.glowAmount);break;}
-   }
-  }
-  bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
   for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c)*clamp01(params_.asciiAmount/100.0f);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
    x0=drawX1;
   }
