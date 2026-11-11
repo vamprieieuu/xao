@@ -1,0 +1,846 @@
+#pragma once
+
+#include <QColor>
+#include <QString>
+#include <cmath>
+#include <map>
+#include <vector>
+
+// ============================================================
+//  Render mode
+// ============================================================
+
+enum class RenderMode {
+    DotGrid    = 0,
+    Dither     = 1,
+    Ascii      = 2,
+    Mosaic     = 3,
+    Halftone   = 4    // canonical AM screen (CMYK) — NOT the old dot-grid mode
+};
+
+// ============================================================
+//  Layer kinds and blend modes
+// ============================================================
+
+enum class LayerKind {
+    Original   = 0,
+    DotGrid    = 1,
+    Dither     = 2,
+    Ascii      = 3,
+    Mosaic     = 4,
+    Halftone   = 5    // canonical AM screen (CMYK) — NOT the old dot-grid mode
+};
+
+// Classic Photoshop blend modes, in Photoshop menu order.
+enum class BlendMode {
+    Normal = 0, Dissolve,
+    Darken, Multiply, ColorBurn, LinearBurn, DarkerColor,
+    Lighten, Screen, ColorDodge, LinearDodge, LighterColor,
+    Overlay, SoftLight, HardLight, VividLight, LinearLight, PinLight, HardMix,
+    Difference, Exclusion, Subtract, Divide,
+    Hue, Saturation, Color, Luminosity
+};
+
+inline LayerKind layerKindForMode(RenderMode m)
+{
+    switch (m) {
+        case RenderMode::Dither:     return LayerKind::Dither;
+        case RenderMode::Ascii:      return LayerKind::Ascii;
+        case RenderMode::Mosaic:     return LayerKind::Mosaic;
+        case RenderMode::Halftone:   return LayerKind::Halftone;
+        default:                     return LayerKind::DotGrid;
+    }
+}
+
+inline RenderMode modeForLayerKind(LayerKind k)
+{
+    switch (k) {
+        case LayerKind::Dither:     return RenderMode::Dither;
+        case LayerKind::Ascii:      return RenderMode::Ascii;
+        case LayerKind::Mosaic:     return RenderMode::Mosaic;
+        case LayerKind::Halftone:   return RenderMode::Halftone;
+        default:                    return RenderMode::DotGrid;
+    }
+}
+
+inline QString layerKindName(LayerKind k)
+{
+    switch (k) {
+        case LayerKind::Original:   return QStringLiteral("Original");
+        case LayerKind::DotGrid:    return QStringLiteral("Dot Grid");
+        case LayerKind::Dither:     return QStringLiteral("Dither");
+        case LayerKind::Ascii:      return QStringLiteral("Ascii");
+        case LayerKind::Mosaic:     return QStringLiteral("Mosaic");
+        case LayerKind::Halftone:   return QStringLiteral("Halftone");
+    }
+    return {};
+}
+
+// ============================================================
+//  Global image adjustments (left panel)
+// ============================================================
+
+struct Adjustments {
+    int brightness      = 0;    // -100..100
+    int contrast        = 0;    // -100..100
+    int gamma           = 100;  // 10..300  → actual = value/100  (1.0 = neutral)
+    int levelsBlack     = 0;    // 0..255   — clips input shadows
+    int levelsMid       = 100;  // 10..500  → actual = value/100  (1.0 = neutral)
+    int levelsWhite     = 255;  // 0..255   — clips input highlights
+    int saturation      = 0;    // -100..100
+    int sizePct         = 100;  // 10..200  — resamples the source
+    int sharpenStrength = 0;    // 0..100
+    int sharpenRadius   = 1;    // 1..10 px
+    int edgeEnhancement = 0;    // 0..100
+    bool invert         = false; // invert RGB (applied before blur)
+    int blur            = 0;    // 0..100
+    int grain           = 0;    // 0..100   (was: noise)
+    int posterize       = 256;  // 2..256   (256 = disabled)
+    int threshold       = 0;    // 0..255   (0 = disabled)
+};
+
+inline bool operator==(const Adjustments& a, const Adjustments& b) {
+    return a.brightness == b.brightness && a.contrast == b.contrast
+        && a.gamma == b.gamma
+        && a.levelsBlack == b.levelsBlack && a.levelsMid == b.levelsMid
+        && a.levelsWhite == b.levelsWhite
+        && a.saturation == b.saturation && a.sizePct == b.sizePct
+        && a.sharpenStrength == b.sharpenStrength
+        && a.sharpenRadius == b.sharpenRadius
+        && a.edgeEnhancement == b.edgeEnhancement
+        && a.invert == b.invert
+        && a.blur == b.blur && a.grain == b.grain
+        && a.posterize == b.posterize && a.threshold == b.threshold;
+}
+inline bool operator!=(const Adjustments& a, const Adjustments& b) { return !(a == b); }
+
+// ============================================================
+//  Tonal controls
+//
+//  Either the renderer samples colors from the image, or it maps
+//  luminosity onto a list of tones. Each tone has a color and a
+//  "level" anchor (0..255): a pixel/cell takes the color of the
+//  tone whose level is nearest to its luminosity, so the sliders
+//  shift where each tone dominates.
+// ============================================================
+
+enum class ToneMode {
+    ImageColors = 0,
+    FixedTones  = 1,
+    Palette     = 2     // dither each pixel to the nearest tone colour
+};
+
+struct ToneEntry {
+    QColor color = QColor(0xD9, 0xD9, 0xD9);
+    int    level = 128;      // 0..255 luminosity anchor
+    float  opacity = 1.0f;   // 0.0..1.0 per-tone opacity
+    // Halftone-only ink trim (ignored by every other consumer of tones):
+    // Halftone's ink-trim Fill rows edit these instead of the level slider,
+    // one rotated screen per tone reusing the same Flood/Gain knobs as the
+    // fixed CMYK inks (see HalftoneSettings).
+    float  flood = 0.0f;     // -1..1
+    float  gain  = 0.0f;     // -1..1
+};
+
+inline bool operator==(const ToneEntry& a, const ToneEntry& b) {
+    return a.color == b.color && a.level == b.level && a.opacity == b.opacity
+        && a.flood == b.flood && a.gain == b.gain;
+}
+
+struct TonalSettings {
+    ToneMode               mode = ToneMode::FixedTones;
+    std::vector<ToneEntry> tones;   // UI order: light → dark
+    bool                   enabled = true;   // Fill "−" removes the fill (false → render uses image colours)
+};
+
+inline bool operator==(const TonalSettings& a, const TonalSettings& b) {
+    return a.mode == b.mode && a.tones == b.tones && a.enabled == b.enabled;
+}
+
+// Evenly spaced default tones, light → dark.
+inline std::vector<ToneEntry> defaultTones(int n)
+{
+    std::vector<ToneEntry> out;
+    if (n <= 1) {
+        out.push_back({ QColor(0x1A, 0x1A, 0x1A), 0 });
+        return out;
+    }
+    const QColor light(0xE8, 0xE8, 0xE8);
+    const QColor dark (0x1A, 0x1A, 0x1A);
+    for (int i = 0; i < n; ++i) {
+        float t = float(i) / float(n - 1);
+        QColor c(int(light.red()   + t * (dark.red()   - light.red())),
+                 int(light.green() + t * (dark.green() - light.green())),
+                 int(light.blue()  + t * (dark.blue()  - light.blue())));
+        out.push_back({ c, 255 - qRound(t * 255.0f) });
+    }
+    return out;
+}
+
+inline std::vector<ToneEntry> defaultAccentTones(int n)
+{
+    std::vector<ToneEntry> out;
+    if (n <= 1) {
+        out.push_back({ QColor(0xD2, 0xFC, 0x51), 0 });
+        return out;
+    }
+
+    const QColor accent(0xD2, 0xFC, 0x51);
+    for (int i = 0; i < n; ++i) {
+        const float t = float(i) / float(n - 1);
+        out.push_back({ accent, 255 - qRound(t * 255.0f) });
+    }
+    return out;
+}
+
+// Index of the tone whose level is nearest to the given luminosity.
+inline int pickToneIndex(const std::vector<ToneEntry>& tones, float lum01)
+{
+    if (tones.empty()) return -1;
+    const int lum = qRound(lum01 * 255.0f);
+    int best = 0, bestDist = 256 * 2;
+    for (int i = 0; i < int(tones.size()); ++i) {
+        int d = qAbs(lum - tones[i].level);
+        if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+}
+
+// ── Preset palettes ───────────────────────────────────────────
+
+struct PalettePreset {
+    QString             name;
+    std::vector<QColor> colors;   // light → dark
+};
+
+inline const std::vector<PalettePreset>& palettePresets()
+{
+    static const std::vector<PalettePreset> presets = {
+        { "Ink & Paper", { QColor("#EDEAE0"), QColor("#1A1A1A") } },
+        { "Gameboy",     { QColor("#9BBC0F"), QColor("#8BAC0F"), QColor("#306230"), QColor("#0F380F") } },
+        { "Sepia",       { QColor("#F4E4C1"), QColor("#C8A165"), QColor("#7A5230") } },
+        { "Ocean",       { QColor("#D7F5FF"), QColor("#4FA3D1"), QColor("#10316B") } },
+        { "Neon",        { QColor("#00FFD1"), QColor("#FF2079"), QColor("#2B0A4E") } },
+        { "Fire",        { QColor("#FFE08A"), QColor("#F95B1E"), QColor("#5C0A0A") } },
+        { "CMYK",        { QColor("#FFF200"), QColor("#00AEEF"), QColor("#EC008C"), QColor("#231F20") } },
+        { "Grayscale",   { QColor("#F2F2F2"), QColor("#BFBFBF"), QColor("#8C8C8C"), QColor("#595959"), QColor("#262626") } },
+    };
+    return presets;
+}
+
+// Build tones from a flat color list with evenly spaced levels.
+inline std::vector<ToneEntry> tonesFromColors(const std::vector<QColor>& colors)
+{
+    std::vector<ToneEntry> out;
+    const int n = int(colors.size());
+    for (int i = 0; i < n; ++i) {
+        int level = (n <= 1) ? 0 : 255 - qRound(float(i) * 255.0f / float(n - 1));
+        out.push_back({ colors[i], level });
+    }
+    return out;
+}
+
+// ============================================================
+//  Dot Grid
+// ============================================================
+
+enum class DotGridShape {
+    Triangle,
+    Circle,
+    Square,
+    Star,
+    CustomSVG
+};
+
+struct ShapeEntry {
+    DotGridShape shape = DotGridShape::Circle;
+    QString       svgPath;
+};
+
+inline bool operator==(const ShapeEntry& a, const ShapeEntry& b) {
+    return a.shape == b.shape && a.svgPath == b.svgPath;
+}
+
+// ── Grid system ──────────────────────────────────────────────
+//
+//  Decouples WHERE samples are placed from HOW primitives are drawn.
+//  A generator produces transformed sample positions; the renderer
+//  draws a luminance-sized shape at each.
+//
+//    spacing      — distance between grid elements (px)
+//    pointSpacing — sample spacing within a ring (Radial)
+//    diameter     — base primitive size multiplier (independent of spacing)
+//    stretch*     — anisotropic scaling of the grid along an axis
+//
+enum class GridType {
+    Square = 0,
+    Hexagonal,
+    Brick,
+    Wave,
+    Radial,
+    Phyllotaxis
+};
+
+struct GridSettings {
+    GridType type               = GridType::Square;
+    float    spacing            = 50.0f;  // 2..200
+    float    pointSpacing       = 20.0f;  // 2..200 — Radial ring sampling
+    float    rotation           = 0.0f;   // 0..360 deg
+    float    diameter           = 1.0f;   // 0.1..3.0 primitive size multiplier
+    float    stretchFactor      = 1.0f;   // 0.1..4.0 anisotropic scale
+    float    stretchAngle       = 0.0f;   // 0..360 deg
+    bool     followGridRotation = false;
+};
+
+inline bool operator==(const GridSettings& a, const GridSettings& b) {
+    return a.type == b.type && a.spacing == b.spacing
+        && a.pointSpacing == b.pointSpacing && a.rotation == b.rotation
+        && a.diameter == b.diameter && a.stretchFactor == b.stretchFactor
+        && a.stretchAngle == b.stretchAngle
+        && a.followGridRotation == b.followGridRotation;
+}
+
+// A single localized override of one numeric parameter: a circular area (drawn
+// and dragged on-canvas) where the parameter is multiplied by `scale` instead
+// of staying uniform. Position/rotation/scale mirror LayerTransform so they
+// slot into the same keyframe system; radius/falloff are static, set only by
+// dragging the on-canvas rings (not animatable, for now).
+struct LocPoint {
+    bool  enabled  = false;
+    float posX     = 0.5f;   // 0..1, normalized frame space
+    float posY     = 0.5f;   // 0..1, normalized frame space
+    float rotation = 0.0f;   // -180..180 — reserved, no visual effect on a circular falloff
+    float scale    = 1.0f;   // 0.1..10 — parameter multiplier applied inside the influence area
+    float radius   = 0.15f;  // 0..1 — influence radius, fraction of the frame's shorter side
+    float falloff  = 0.3f;   // 0..1 — fraction of radius that is a soft transition
+};
+
+inline bool operator==(const LocPoint& a, const LocPoint& b) {
+    return a.enabled == b.enabled && a.posX == b.posX && a.posY == b.posY
+        && a.rotation == b.rotation && a.scale == b.scale
+        && a.radius == b.radius && a.falloff == b.falloff;
+}
+
+// Every localizable parameter (one on-canvas point max per parameter). Order
+// is grouped by layer kind — locParamKind() relies on the grouping, and the
+// animation system appends one ParamId quartet per entry in this exact order.
+enum class LocParam {
+    DgDiameter, DgGamma, DgWeight, DgJitter, DgMask,
+    DiStrength, DiThreshold, DiLevels, DiLineAngle, DiLineSpacing, DiMask,
+    AsGamma, AsEdges, AsHatching, AsStipple, AsContour, AsMask,
+    MsSpacing, MsWidthPct, MsHeightPct, MsTextPadding, MsMask,
+    Count
+};
+
+using LocMap = std::map<LocParam, LocPoint>;
+
+inline LocPoint locPointOr(const LocMap& m, LocParam p)
+{
+    const auto it = m.find(p);
+    return it == m.end() ? LocPoint{} : it->second;
+}
+
+inline LayerKind locParamKind(LocParam p)
+{
+    if (p <= LocParam::DgMask)        return LayerKind::DotGrid;
+    if (p <= LocParam::DiMask)        return LayerKind::Dither;
+    if (p <= LocParam::AsMask)        return LayerKind::Ascii;
+    return LayerKind::Mosaic;
+}
+
+// Multiplier field for one localized parameter, precomputed in the pixel
+// space of the image being rendered. mul() is what renderers sample: ×scale
+// inside the falloff radius, smoothstep across the transition band, ×1 (the
+// slider's base value) at/beyond the ring. The "nothing outside the circle"
+// behaviour comes from LocMask below, not from the per-parameter multiplier.
+struct LocField {
+    bool  on = false;
+    float cx = 0, cy = 0, rIn = 0, rOut = 0, scale = 1;
+
+    float t(float x, float y) const {
+        const float d = std::hypot(x - cx, y - cy);
+        if (d <= rIn) return 1.0f;
+        if (d >= rOut || rOut <= rIn) return 0.0f;
+        const float u = (rOut - d) / (rOut - rIn);
+        return u * u * (3.0f - 2.0f * u);
+    }
+    float mul(float x, float y) const {
+        return on ? 1.0f + (scale - 1.0f) * t(x, y) : 1.0f;
+    }
+};
+
+inline LocField locField(const LocMap& m, LocParam p, float imgW, float imgH)
+{
+    LocField f;
+    const LocPoint pt = locPointOr(m, p);
+    if (!pt.enabled) return f;
+    f.on    = true;
+    f.cx    = pt.posX * imgW;
+    f.cy    = pt.posY * imgH;
+    f.rOut  = pt.radius * std::min(imgW, imgH);
+    f.rIn   = f.rOut * (1.0f - std::min(std::max(pt.falloff, 0.0f), 1.0f));
+    f.scale = pt.scale;
+    return f;
+}
+
+// Spotlight mask: with any localization point enabled, the layer's effect
+// only exists inside the union of the enabled circles (exactly the original
+// localize-diameter behaviour — dots vanish outside — generalized to every
+// parameter). 1 inside, smoothstep across each falloff band, 0 outside all.
+struct LocMask {
+    bool on = false;
+    std::vector<LocField> pts;
+
+    float mask(float x, float y) const {
+        if (!on) return 1.0f;
+        float best = 0.0f;
+        for (const LocField& f : pts)
+            best = std::max(best, f.t(x, y));
+        return best;
+    }
+};
+
+inline LocMask locMask(const LocMap& m, float imgW, float imgH)
+{
+    LocMask out;
+    for (const auto& [p, pt] : m) {
+        if (!pt.enabled) continue;
+        out.pts.push_back(locField(m, p, imgW, imgH));
+    }
+    out.on = !out.pts.empty();
+    return out;
+}
+
+struct DotGridSettings {
+    int                     inputDpi       = 72;   // 18..300 — render resolution
+    std::vector<ShapeEntry> shapes         = { ShapeEntry{} };
+    int                     multiThreshold = 128;  // luminosity bias, shapes.size() > 1
+
+    GridSettings grid;
+    float gamma        = 1.0f;
+    float weight       = 0.0f;   // 0 = size ∝ ink coverage, 1 = all symbols full size
+    float jitter       = 0.0f;
+    float opacity      = 1.0f;
+    float cornerRadius = 0.0f;
+    LocMap loc;   // per-parameter localization points (Ht* keys)
+
+    TonalSettings tonal { ToneMode::ImageColors, defaultAccentTones(1) };
+};
+
+inline bool operator==(const DotGridSettings& a, const DotGridSettings& b) {
+    return a.inputDpi == b.inputDpi && a.shapes == b.shapes
+        && a.multiThreshold == b.multiThreshold && a.grid == b.grid
+        && a.gamma == b.gamma && a.weight == b.weight
+        && a.jitter == b.jitter && a.opacity == b.opacity
+        && a.cornerRadius == b.cornerRadius && a.loc == b.loc
+        && a.tonal == b.tonal;
+}
+
+// ============================================================
+//  Dither
+// ============================================================
+
+enum class DitherAlgorithm {
+    // ── Error Diffusion ──────────────────────────────────────────
+    FloydSteinberg      = 0,   // Classic; balanced worm artifacts
+    FalseFloydSteinberg = 1,   // Lightweight FS approximation; very fast
+    Atkinson            = 2,   // 75 % error; iconic retro / Mac aesthetic
+    Burkes              = 3,   // Simplified JJN; reduced directional bias
+    Sierra              = 4,   // Refined diffusion; smooth gradients
+    SierraLite          = 5,   // Minimal Sierra; real-time friendly
+    JarvisJudiceNinke   = 6,   // Wide kernel; exceptional tonal accuracy
+    Stucki              = 7,   // JJN variant; cleaner shadows
+    // ── Ordered Dithering ────────────────────────────────────────
+    Bayer               = 8,   // Threshold matrix; crisp geometric pattern
+    ClusteredDot        = 9,   // Halftone-style dot clusters; print-like
+    BlueNoise           = 10,  // Void-and-cluster mask; natural appearance
+    VoidAndCluster      = 11,  // Ulichney optimal mask; minimal repetition
+    // ── Hybrid ───────────────────────────────────────────────────
+    DotDiffusion        = 12,  // Class-matrix ordered + error diffusion
+    // ── Tone ──────────────────────────────────────────────────────
+    Threshold           = 13,  // Hard B/W cut by a threshold (no dithering)
+    // ── Error Diffusion (extended; tables/refs from libdither) ────
+    Ostromoukhov        = 14,  // Variable-coefficient error diffusion
+    Riemersma           = 15,  // Error diffusion along a Hilbert curve
+    // ── Ordered (extended) ───────────────────────────────────────
+    LineHatch           = 16,  // Parallel line screen; thickness follows tone
+    CustomPattern       = 17   // User image tiled as the threshold matrix
+};
+
+struct DitherSettings {
+    DitherAlgorithm algorithm = DitherAlgorithm::Bayer;
+    int             bayerSize = 8;    // 2, 4, 8, 16
+    int             pixelSize = 2;    // 1..100 — chunky pixels
+    int             strength  = 50;   // 0..100
+    int             threshold = 50;   // 0..100 — only for the Threshold algorithm
+    float           opacity      = 1.0f;
+    float           cornerRadius = 0.0f;
+    int             levels       = 2;     // 2..16 — mixing inks: steps/channel (image colors) or interpolated tones (fills)
+    bool            serpentine   = true;  // error diffusion: zig-zag scan vs left→right
+    float           lineAngle    = 45.0f; // 0..180 deg — LineHatch direction
+    int             lineSpacing  = 6;     // 2..32 cells — LineHatch line period
+    QString         patternPath;          // CustomPattern threshold image
+    LocMap          loc;                  // per-parameter localization points (Di* keys)
+
+    TonalSettings tonal { ToneMode::ImageColors, defaultAccentTones(1) };
+};
+
+// Working-raster clamp for DitherSettings::pixelSize — NOT the UI range.
+// pixelSize is authored in FRAME px and then divided by the layer's placement
+// scale (compensateSymbolScale, RenderWorker): a photo fitted into the frame at
+// 0.35× turns a UI value of 35 into 100 working px. Clamping the working value
+// at the UI maximum (100) therefore froze the effect at ~35 on any downscaled
+// layer. This guard only exists to reject absurd values, so it keeps headroom
+// for the largest sane downscale.
+inline int clampPixelSize(int ps) { return qBound(1, ps, 4096); }
+
+inline bool operator==(const DitherSettings& a, const DitherSettings& b) {
+    return a.algorithm == b.algorithm && a.bayerSize == b.bayerSize
+        && a.pixelSize == b.pixelSize && a.strength == b.strength
+        && a.threshold == b.threshold
+        && a.opacity == b.opacity && a.cornerRadius == b.cornerRadius
+        && a.levels == b.levels && a.serpentine == b.serpentine
+        && a.lineAngle == b.lineAngle && a.lineSpacing == b.lineSpacing
+        && a.patternPath == b.patternPath && a.loc == b.loc
+        && a.tonal == b.tonal;
+}
+
+// ============================================================
+//  Ascii
+// ============================================================
+
+struct AsciiCharsetPreset {
+    QString name;
+    QString chars;   // lightest → darkest
+};
+
+inline const std::vector<AsciiCharsetPreset>& asciiCharsetPresets()
+{
+    static const std::vector<AsciiCharsetPreset> presets = {
+        { "Standard", QString::fromUtf8(" .:-=+*#%@") },
+        { "Detailed", QString::fromUtf8(" .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$") },
+        { "Blocks",   QString::fromUtf8(" ░▒▓█") },
+        { "Minimal",  QString::fromUtf8(" .oO0@") },
+        { "Binary",   QString::fromUtf8(" 01") },
+        // Special-cased by the renderer: 2×4 braille dots per cell (8× the
+        // effective resolution). The ramp here is only a safe fallback.
+        { "Braille",  QString::fromUtf8(" ⣿") },
+    };
+    return presets;
+}
+
+// The Braille preset is render-path special-cased; keep it LAST in the list.
+inline int asciiBraillePreset() { return int(asciiCharsetPresets().size()) - 1; }
+
+struct AsciiSettings {
+    int     charsetPreset = 0;        // index into presets; == size() → custom
+    QString customCharset;
+    int     cellSize      = 12;       // 4..100 px
+    GridType gridShape    = GridType::Square;   // glyph lattice layout (Square/Hex/Brick/Wave/Radial/Phyllotaxis)
+    float   gamma         = 1.0f;
+    QString fontFamily    = QStringLiteral("Consolas");
+    int     fontWeight    = 600;      // QFont::Weight (400/500/600/700)
+    int     edges         = 0;        // 0..100 — contour glyphs (/ - \ |); 0 = off
+    int     stipple       = 0;        // 0..100 — organic per-cell darkness jitter; 0 = off
+    bool    orderedDither = false;    // Bayer-threshold glyph pick instead of nearest-coverage
+    int     contour       = 0;        // 0..100 — isoline-only mask (topographic look); 0 = off
+    int     hatching      = 0;        // 0..100 — directional engraving strokes shading shadows; 0 = off
+    float   opacity       = 1.0f;     // 0..1 — no corner radius: glyphs aren't rounded rects
+    LocMap  loc;                      // per-parameter localization points (As* keys)
+
+    TonalSettings tonal { ToneMode::ImageColors,
+                          { ToneEntry{ QColor(0xC0, 0xC0, 0xC0), 0 } } };
+
+    bool isBraille() const { return charsetPreset == asciiBraillePreset(); }
+
+    QString effectiveCharset() const {
+        const auto& presets = asciiCharsetPresets();
+        if (charsetPreset >= 0 && charsetPreset < int(presets.size()))
+            return presets[charsetPreset].chars;
+        if (customCharset.size() >= 2) return customCharset;
+        return presets[0].chars;
+    }
+};
+
+inline bool operator==(const AsciiSettings& a, const AsciiSettings& b) {
+    return a.charsetPreset == b.charsetPreset && a.customCharset == b.customCharset
+        && a.cellSize == b.cellSize && a.gridShape == b.gridShape && a.gamma == b.gamma
+        && a.fontFamily == b.fontFamily && a.fontWeight == b.fontWeight
+        && a.edges == b.edges && a.stipple == b.stipple
+        && a.orderedDither == b.orderedDither
+        && a.contour == b.contour && a.hatching == b.hatching
+        && a.opacity == b.opacity
+        && a.loc == b.loc
+        && a.tonal == b.tonal;
+}
+
+// ============================================================
+//  Mosaic — rectangular tile grid. Each tile takes the tone whose
+//  level is nearest to its average luminosity (the shared tonal
+//  system), is filled with that tone's colour, and can carry that
+//  tone's text (one string per tone), scaled to fit the tile.
+//  cellW/cellH are FRAME pixels, like every other symbol size.
+// ============================================================
+
+struct MosaicSettings {
+    float   spacing     = 40.0f;   // 2..200 — base cell size (frame px), like halftone
+    float   widthPct    = 100.0f;  // 10..300 — cell width  = spacing × widthPct/100
+    float   heightPct   = 100.0f;  // 10..300 — cell height = spacing × heightPct/100
+    GridType gridShape    = GridType::Square;   // tile lattice layout, like Dot Grid's grid
+    float    gridRotation = 0.0f;               // 0..360 deg — rotates the lattice
+    int     textPadding = 12;      // 0..45  — % of the tile's shorter side
+    QString fontFamily  = QStringLiteral("Funnel Display");
+    int     fontWeight  = 600;     // QFont::Weight (400/500/600/700)
+    float   opacity      = 1.0f;   // 0..1
+    float   cornerRadius = 0.0f;   // 0..100 — % of the tile's shorter half-side
+    std::vector<QString> texts;      // per-tone label, index-aligned with tonal.tones
+    std::vector<QColor>  textColors; // per-tone text colour; invalid = auto contrast
+
+    TonalSettings tonal { ToneMode::ImageColors, defaultTones(4) };
+    LocMap loc;
+
+    float cellW() const { return qBound(2.0f, spacing, 600.0f) * qBound(10.0f, widthPct, 300.0f)  / 100.0f; }
+    float cellH() const { return qBound(2.0f, spacing, 600.0f) * qBound(10.0f, heightPct, 300.0f) / 100.0f; }
+};
+
+inline bool operator==(const MosaicSettings& a, const MosaicSettings& b) {
+    return a.spacing == b.spacing && a.widthPct == b.widthPct
+        && a.heightPct == b.heightPct
+        && a.gridShape == b.gridShape && a.gridRotation == b.gridRotation
+        && a.textPadding == b.textPadding
+        && a.fontFamily == b.fontFamily && a.fontWeight == b.fontWeight
+        && a.opacity == b.opacity && a.cornerRadius == b.cornerRadius
+        && a.texts == b.texts && a.textColors == b.textColors
+        && a.tonal == b.tonal && a.loc == b.loc;
+}
+
+// ============================================================
+//  Halftone — canonical AM (amplitude-modulated) print screen:
+//  four separate CMYK screens, each rotated to its own angle,
+//  dot area ∝ ink coverage with hole-inversion past 50%, channels
+//  composited multiplicatively on white. Colours derive from the
+//  source (no tonal palette, no localization in v1).
+// ============================================================
+
+// Ink = soft-field "joined" dots (paper-design/shaders' halftone-cmyk "ink"
+// type, Apache-2.0): per-cell soft masks accumulate and a single threshold
+// cuts the union, so neighbouring dots fuse into organic blobs.
+enum class ScreenDotShape { Round, Square, Line, Ink };
+
+struct HalftoneSettings {
+    float spacing  = 12.0f;   // 2..100 — shared cell pitch, frame px
+    float angleC   = 15.0f;   // 0..360 deg — per-channel screen angles
+    float angleM   = 75.0f;
+    float angleY   = 0.0f;
+    float angleK   = 45.0f;
+    ScreenDotShape dotShape = ScreenDotShape::Round;
+    float gamma    = 1.0f;    // 0.1..5.0 — coverage curve
+    float opacity  = 1.0f;
+    float softness = 0.5f;    // 0..1 — edge softness (Ink: threshold ramp; others: per-dot feather)
+    float gridNoise = 0.0f;   // 0..1 — "Jitter": random per-cell offset of dot position + sampling
+    float grain    = 0.0f;    // 0..1 — paper-grain overlay (+ organic Ink edges)
+
+    // Editable inks + paper and per-channel dot-size trims, modeled after
+    // paper-design/shaders' halftone-cmyk (Apache-2.0,
+    // github.com/paper-design/shaders): flood = flat coverage offset,
+    // gain = proportional coverage gain (classic print dot-gain knob).
+    QColor inkC  = QColor(0x00, 0xFF, 0xFF);
+    QColor inkM  = QColor(0xFF, 0x00, 0xFF);
+    QColor inkY  = QColor(0xFF, 0xFF, 0x00);
+    QColor inkK  = QColor(0x00, 0x00, 0x00);
+    QColor paper = QColor(0xFF, 0xFF, 0xFF);
+    float floodC = 0.0f, floodM = 0.0f, floodY = 0.0f, floodK = 0.0f;  // -1..1
+    float gainC  = 0.0f, gainM  = 0.0f, gainY  = 0.0f, gainK  = 0.0f; // -1..1
+
+    // Shared Fill system, like every other mode. ImageColors (default) =
+    // true CMYK separation with the editable inks above; FixedTones/Palette
+    // = one rotated screen PER TONE (duotone/tritone/N-ink printing), each
+    // ink's coverage peaking where cell luminosity matches its tone level.
+    TonalSettings tonal { ToneMode::ImageColors, defaultAccentTones(1) };
+};
+
+inline bool operator==(const HalftoneSettings& a, const HalftoneSettings& b) {
+    return a.spacing == b.spacing && a.angleC == b.angleC
+        && a.angleM == b.angleM && a.angleY == b.angleY
+        && a.angleK == b.angleK && a.dotShape == b.dotShape
+        && a.gamma == b.gamma && a.opacity == b.opacity
+        && a.softness == b.softness && a.gridNoise == b.gridNoise
+        && a.grain == b.grain
+        && a.inkC == b.inkC && a.inkM == b.inkM && a.inkY == b.inkY
+        && a.inkK == b.inkK && a.paper == b.paper
+        && a.floodC == b.floodC && a.floodM == b.floodM
+        && a.floodY == b.floodY && a.floodK == b.floodK
+        && a.gainC == b.gainC && a.gainM == b.gainM
+        && a.gainY == b.gainY && a.gainK == b.gainK
+        && a.tonal == b.tonal;
+}
+
+// ============================================================
+//  Layer — one entry of the per-image layer stack
+//
+//  Each layer owns its full parameter set: its own image
+//  adjustments (the layer's embedded "reference image" is
+//  source + adjustments) plus the render settings of its kind.
+//  Multiple layers of the same kind can coexist; layers are
+//  identified by a per-session unique id.
+// ============================================================
+
+// Per-layer placement on the frame: centre offset as a fraction of the frame,
+// a uniform scale (100% = the layer's own pixels drawn 1:1 on the frame) and a
+// rotation. Animatable.
+struct LayerTransform {
+    float xPct     = 0.0f;     // -1..1 — horizontal centre offset (fraction of frame)
+    float yPct     = 0.0f;     // -1..1 — vertical centre offset
+    float scalePct = 100.0f;   // uniform scale (100 = native pixels)
+    float aspectPct = 100.0f;  // extra Y-only stretch on top of scalePct
+                               // (100 = source aspect). Canvas edge drags write
+                               // this; the Scale slider keeps touching scalePct.
+    float rotation = 0.0f;     // -180..180 deg
+    bool  flipH    = false;    // mirror about the vertical (y) axis — left/right
+    bool  flipV    = false;    // mirror about the horizontal (x) axis — top/bottom
+};
+inline bool operator==(const LayerTransform& a, const LayerTransform& b) {
+    return a.xPct == b.xPct && a.yPct == b.yPct
+        && a.scalePct == b.scalePct && a.aspectPct == b.aspectPct
+        && a.rotation == b.rotation
+        && a.flipH == b.flipH && a.flipV == b.flipV;
+}
+
+// Per-axis placement scale (1.0 = native px). Every placement matrix and every
+// bounding-quad computation must go through this, or a stretched layer draws
+// with the wrong height somewhere.
+struct LayerScaleXY { double x, y; };
+inline LayerScaleXY layerScaleXY(const LayerTransform& t) {
+    const double s = std::max(0.0001, double(t.scalePct) / 100.0);
+    return { s, s * std::max(0.0001, double(t.aspectPct) / 100.0) };
+}
+
+// Scale a layer so it fits entirely inside the frame (contain), keeping aspect.
+inline LayerTransform fitTransform(int imgW, int imgH, int frameW, int frameH)
+{
+    LayerTransform t;
+    if (imgW > 0 && imgH > 0 && frameW > 0 && frameH > 0)
+        t.scalePct = qMin(float(frameW) / imgW, float(frameH) / imgH) * 100.0f;
+    return t;
+}
+
+struct Layer {
+    int       id      = -1;
+    LayerKind kind    = LayerKind::Original;
+    QString   name;
+    bool      visible = true;
+    bool      pinned  = false;   // turned on by hand → survives mode switches
+    bool      locked  = false;   // canvas clicks/drags ignore it; panels still edit it
+    BlendMode blend   = BlendMode::Normal;
+    float     opacity = 1.0f;   // 0..1 — only used while kind == Original (no mode picked);
+                                 // every other kind bakes its own opacity into the mode render
+
+    int            mediaId   = -1;   // which media this layer draws (-1 = document base)
+    LayerTransform transform;        // placement on the canvas
+
+    Adjustments      adjustments;   // per-layer reference image
+    DotGridSettings dotGrid;       // only the struct matching `kind` is used
+    DitherSettings   dither;
+    AsciiSettings    ascii;
+    MosaicSettings   mosaic;
+    HalftoneSettings halftone;      // canonical CMYK screen (JSON key "halftoneAm")
+};
+
+inline bool operator==(const Layer& a, const Layer& b) {
+    return a.id == b.id && a.kind == b.kind && a.name == b.name
+        && a.visible == b.visible && a.pinned == b.pinned
+        && a.locked == b.locked && a.blend == b.blend && a.opacity == b.opacity
+        && a.mediaId == b.mediaId && a.transform == b.transform
+        && a.adjustments == b.adjustments && a.dotGrid == b.dotGrid
+        && a.dither == b.dither && a.ascii == b.ascii && a.mosaic == b.mosaic
+        && a.halftone == b.halftone;
+}
+inline bool operator!=(const Layer& a, const Layer& b) { return !(a == b); }
+
+inline int findLayerById(const std::vector<Layer>& layers, int id)
+{
+    for (int i = 0; i < int(layers.size()); ++i)
+        if (layers[i].id == id) return i;
+    return -1;
+}
+
+// Session default: visible no-mode layer (raw image, "Select mode…") over
+// the hidden Original.
+inline std::vector<Layer> defaultLayers()
+{
+    Layer top;
+    top.id      = 2;
+    top.kind    = LayerKind::Original;
+    top.name    = layerKindName(LayerKind::Original);
+    top.visible = true;
+
+    Layer original;
+    original.id      = 1;
+    original.kind    = LayerKind::Original;
+    original.name    = layerKindName(LayerKind::Original);
+    original.visible = false;
+
+    return { top, original };
+}
+
+// ============================================================
+//  Parent groups (cascade): a parent is a source image (a media
+//  entry) that does NOT itself appear in the frame. Its children
+//  are the rendering Layers whose mediaId == this group's mediaId.
+//  Order in SessionParams::parents = top→bottom group order.
+// ============================================================
+
+struct ParentGroup {
+    int     mediaId      = -1;
+    QString name;
+    bool    collapsed    = false;   // children hidden in the panel (UI only)
+    bool    groupVisible = true;    // master visibility for all children in the frame
+    // Video clips only: in/out point in clip-local frames (0 = first frame).
+    // trimOut < 0 = untrimmed. Outside [trimIn,trimOut] the group's children
+    // don't render — the clip's content stays anchored in time (AE trim).
+    int     trimIn       = 0;
+    int     trimOut      = -1;
+    // Where clip-local frame 0 sits on the timeline, as an offset from
+    // Animation::frameStart (dragging the clip bar sideways). May be negative
+    // so a later clip frame can coincide with timeline frame 0.
+    int     timeOffset   = 0;
+};
+inline bool operator==(const ParentGroup& a, const ParentGroup& b) {
+    return a.mediaId == b.mediaId && a.name == b.name
+        && a.collapsed == b.collapsed && a.groupVisible == b.groupVisible
+        && a.trimIn == b.trimIn && a.trimOut == b.trimOut
+        && a.timeOffset == b.timeOffset;
+}
+inline bool operator!=(const ParentGroup& a, const ParentGroup& b) { return !(a == b); }
+
+// ============================================================
+//  Whole document state (used for rendering and undo/redo)
+// ============================================================
+
+struct SessionParams {
+    std::vector<Layer>       layers  = defaultLayers();   // children, UI order: 0 = top
+    std::vector<ParentGroup> parents;                     // source groups, top→bottom
+    int                activeLayerId = 2;          // layer edited by the panels
+    int                nextLayerId   = 3;          // id counter for new layers
+
+    QColor background        = QColor(0x0A, 0x0A, 0x0A);
+    float  backgroundOpacity = 1.0f;
+
+    int    frameW = 1080;   // canvas the layers are composited onto
+    int    frameH = 1080;
+};
+
+inline int findParentByMedia(const std::vector<ParentGroup>& parents, int mediaId) {
+    for (int i = 0; i < int(parents.size()); ++i)
+        if (parents[i].mediaId == mediaId) return i;
+    return -1;
+}
+
+// activeLayerId is deliberately ignored: selection alone is not an
+// undoable change.
+inline bool operator==(const SessionParams& a, const SessionParams& b) {
+    return a.layers == b.layers && a.parents == b.parents && a.nextLayerId == b.nextLayerId
+        && a.background == b.background && a.backgroundOpacity == b.backgroundOpacity
+        && a.frameW == b.frameW && a.frameH == b.frameH;
+}
+inline bool operator!=(const SessionParams& a, const SessionParams& b) { return !(a == b); }

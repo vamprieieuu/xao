@@ -1,0 +1,35 @@
+# Build output
+build/
+out/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+_deps/
+
+# Local launcher (machine-specific paths)
+/run.bat
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Compiled artifacts
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.pdb
+
+# Snapshots / recordings produced by the app
+snapshots/
+*.txt.snapshot
+/out_*.png
+/out_*.mp4
+/snapshot.png
+/capture.mp4

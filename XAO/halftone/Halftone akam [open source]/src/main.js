@@ -1,0 +1,1986 @@
+// main.js — p5 instance, app state, and all the wiring between the input stage,
+// the auto-generated controls, the effect pipeline, and export.
+
+import EFFECTS from "./effects/index.js";
+import { createEffectStack } from "./effects/stack.js";
+import {
+  buildPanel,
+  appendParams,
+  defaultsOf,
+  randomizeInto,
+} from "./controls.js";
+import { exportPNG, exportSeparations, exportSVG } from "./export.js";
+import {
+  MEDIA_LIMITS,
+  computeTargetFps,
+  detectMediaKind,
+  fitWithin,
+  formatMediaTime,
+  loadGifSource,
+  loadVideoSource,
+  validateMediaFile,
+} from "./media.js";
+import {
+  downloadBlob,
+  encodeGif,
+  preferredWebMMime,
+  recordCanvasWebM,
+} from "./animated-export.js";
+import { wireFilmstripWheel } from "./ui/filmstrip-wheel.js";
+
+const $ = (sel) => document.querySelector(sel);
+
+/* ----------------------------------------------------------------
+   App state
+   ---------------------------------------------------------------- */
+const App = {
+  p: null,
+  srcImage: null, // working source, downscaled to SRC_CAP for the pipeline
+  srcDims: null, // { w, h } of the original upload, for the meta readout
+  stack: null, // the reusable EffectStack (whole pipeline, self-caching)
+  pre: { brightness: 0, contrast: 0, gamma: 1, invert: false },
+  activeId: EFFECTS[0].id,
+  states: {}, // per-effect param values
+  canvasW: 0,
+  canvasH: 0,
+  preStage: "none", // color pre-stage: id of a color module, or 'none'
+  preStageParams: {}, // pre-stage params, kept separate from active-effect params
+  effect2Id: "none", // the second slot's effect; 'none' = no second pass (slot B off)
+  states2: {}, // per-effect param values for the second slot (independent)
+  filmTarget: "A", // which slot the preset filmstrip currently edits: 'A' | 'B'
+  _dirty: false, // something changed; the canvas needs a repaint
+  _raf: 0, // armed requestAnimationFrame handle (0 = none armed)
+  _debounce: null,
+  _resize: null,
+  _resizePending: false, // a resize arrived while hidden; applied on wake
+  _paintHold: 0, // performance.now() deadline before which painting is suspended
+  _holdTimer: null, // re-arms the paint when _paintHold lapses
+  _srcOwned: null, // fitSource()'s downscaled graphics — removed when replaced
+  _exportLastFocus: null, // element focused before export panel opened
+  mediaSource: null, // animated GIF/video controller; null for still images
+  mediaKind: "image",
+  mediaVersion: 0, // increments whenever an animated frame replaces srcImage pixels
+  mediaPlaying: false,
+  mediaPump: 0,
+  mediaPumpLast: 0,
+  mediaLoadAbort: null,
+  sourceLoadVersion: 0,
+  exportAbort: null,
+  exportBusy: false,
+  _resumeOnVisible: false,
+};
+
+const PRE_SCHEMA = [
+  {
+    key: "brightness",
+    label: "Brightness",
+    type: "range",
+    min: -100,
+    max: 100,
+    step: 1,
+    value: 0,
+  },
+  {
+    key: "contrast",
+    label: "Contrast",
+    type: "range",
+    min: -100,
+    max: 100,
+    step: 1,
+    value: 0,
+  },
+  {
+    key: "gamma",
+    label: "Gamma",
+    type: "range",
+    min: 0.2,
+    max: 3,
+    step: 0.05,
+    value: 1,
+  },
+  { key: "invert", label: "Invert source", type: "toggle", value: false },
+];
+
+for (const e of EFFECTS) App.states[e.id] = defaultsOf(e.params);
+// the stacked second effect keeps its own independent param set per effect
+for (const e of EFFECTS) App.states2[e.id] = defaultsOf(e.params);
+// color modules keep a second, independent set of params for the pre-stage
+for (const e of EFFECTS)
+  if (e.category === "color") App.preStageParams[e.id] = defaultsOf(e.params);
+
+const activeEffect = () => EFFECTS.find((e) => e.id === App.activeId);
+const activeState = () => App.states[App.activeId];
+const effect2 = () => EFFECTS.find((e) => e.id === App.effect2Id);
+const effect2State = () => App.states2[App.effect2Id];
+// Slot B is "on" whenever its effect isn't the null/None pass-through.
+const isEffect2On = () => App.effect2Id !== "none";
+// The param state the canvas finally shows — slot 2 when stacked, else slot 1.
+const finalState = () => (isEffect2On() ? effect2State() : activeState());
+// The effect id the filmstrip presets currently apply to (slot A or B).
+const targetEffectId = () =>
+  App.filmTarget === "B" ? App.effect2Id : App.activeId;
+
+/* ----------------------------------------------------------------
+   p5 instance (INSTANCE mode — coexists with the DOM panel)
+   ---------------------------------------------------------------- */
+new p5((p) => {
+  p.setup = () => {
+    App.p = p;
+    App.stack = createEffectStack(p);
+    const { w, h } = computeCanvasSize();
+    App.canvasW = w;
+    App.canvasH = h;
+    const c = p.createCanvas(w, h);
+    c.parent("canvas-holder");
+    p.pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+    p.noLoop();
+    p.background(255);
+  };
+
+  p.draw = () => renderActive();
+
+  p.windowResized = () => {
+    clearTimeout(App._resize);
+    App._resize = setTimeout(() => {
+      // While the page is hidden (tab switch, backgrounded app, iOS photo
+      // picker — which resizes the viewport as its sheet animates) don't touch
+      // the canvas: resizeCanvas recreates the backing store, and a repaint
+      // can't happen anyway. Remember the request; the wake handlers apply it.
+      if (document.hidden) {
+        App._resizePending = true;
+        return;
+      }
+      applyResize();
+    }, 120);
+  };
+});
+
+/* ----------------------------------------------------------------
+   Sizing / pipeline
+   ---------------------------------------------------------------- */
+// Sizing limits. The proof always shows the *whole* image (contain — never
+// cropped), so the canvas itself takes the image's aspect ratio and is fitted
+// inside the stage frame. AR_MIN/AR_MAX clamp the proof's shape so a freakishly
+// tall/wide image can't collapse the canvas or overflow the layout (such images
+// just letterbox onto paper inside the clamped proof); EDGE_CAP caps resolution.
+const AR_MIN = 0.45; // tallest proof allowed (~9:20)
+const AR_MAX = 2.2; // widest proof allowed (~11:5)
+const EDGE_CAP = 2200; // absolute long-edge cap (performance)
+
+function computeCanvasSize() {
+  const frame = $("#canvas-holder").parentElement; // .stage-frame
+  const rect = frame.getBoundingClientRect();
+  const pad = 44;
+  const availW = Math.max(120, rect.width - pad);
+  const availH = Math.max(120, rect.height - pad);
+
+  // No image yet → fill the available area (the empty-state overlay covers it).
+  if (!App.srcImage || !App.srcImage.height) {
+    return {
+      w: Math.round(Math.min(availW, EDGE_CAP)),
+      h: Math.round(Math.min(availH, EDGE_CAP)),
+    };
+  }
+
+  // Proof = image aspect ratio (clamped), fitted inside the frame.
+  const ar = Math.min(
+    AR_MAX,
+    Math.max(AR_MIN, App.srcImage.width / App.srcImage.height),
+  );
+  let w = availW,
+    h = w / ar;
+  if (h > availH) {
+    h = availH;
+    w = h * ar;
+  }
+
+  const long = Math.max(w, h);
+  if (long > EDGE_CAP) {
+    const k = EDGE_CAP / long;
+    w *= k;
+    h *= k;
+  }
+
+  return { w: Math.round(w), h: Math.round(h) };
+}
+
+// Apply a (possibly deferred) window resize. The size-unchanged guard matters:
+// iOS fires resize on URL-bar collapse and picker-sheet animation without the
+// stage actually changing, and every needless resizeCanvas both recreates the
+// canvas backing store (memory churn Safari reclaims lazily) and forces a full
+// pipeline re-render.
+function applyResize() {
+  App._resizePending = false;
+  const { w, h } = computeCanvasSize();
+  if (w === App.canvasW && h === App.canvasH) return;
+  App.canvasW = w;
+  App.canvasH = h;
+  App.p.resizeCanvas(w, h, true);
+  if (App.srcImage) requestRender();
+  else App.p.background(255);
+}
+
+// The EffectStack rebuilds its working buffer automatically when the image,
+// pre-adjust, or canvas size changes (it keys each stage by a signature), so a
+// "recompute" is just a request to redraw. Kept as a named function because
+// pre-adjust / fit / resize callbacks read clearer calling it.
+function recompute() {
+  if (!App.p || !App.srcImage) return;
+  requestRender();
+}
+
+// A bundle is heavy when a redraw runs more than one cheap pass: a heavy
+// effect, a stacked B pass (two full renders + a display-res loadPixels per
+// frame), or a colour pre-stage. Heavy bundles get a short
+// debounce so a slider drag doesn't run the full pipeline per input event —
+// the old check only looked at effect A, so any stacked chain re-rendered
+// everything on every tick.
+const isHeavyBundle = () =>
+  !!activeEffect().heavy ||
+  isEffect2On() ||
+  App.preStage !== "none";
+
+function requestRender() {
+  if (!isHeavyBundle() || (App._lastRenderMs || 0) < 20) {
+    if (App._debounce) {
+      clearTimeout(App._debounce);
+      App._debounce = null;
+    }
+    App._lastRequestTime = performance.now();
+    markDirty();
+    return;
+  }
+  const now = performance.now();
+  const throttleMs = 50;
+  const elapsed = now - (App._lastRequestTime || 0);
+  if (elapsed >= throttleMs) {
+    if (App._debounce) {
+      clearTimeout(App._debounce);
+      App._debounce = null;
+    }
+    App._lastRequestTime = now;
+    markDirty();
+  } else if (!App._debounce) {
+    App._debounce = setTimeout(() => {
+      App._debounce = null;
+      App._lastRequestTime = performance.now();
+      markDirty();
+    }, throttleMs - elapsed);
+  }
+}
+
+// Single mode's params bundle for the shared EffectStack: the global pre-adjust,
+// colour pre-stage, and active effect.
+function singleBundle(overrides) {
+  // For animated media (video/GIF), cap internal working resolution to 1x canvas
+  // dimensions (up to 960px) across playback, pause, seeking, and WebM recording
+  // so playback stays fluid and pausing/exporting never shifts pixel-space effects.
+  // Still images use full SAMPLING_CAP (1600).
+  const liveCap = App.mediaSource
+    ? Math.min(960, Math.max(480, Math.max(App.canvasW || 0, App.canvasH || 0)))
+    : undefined;
+  const b = {
+    pre: App.pre,
+    sourceVersion: App.mediaVersion,
+    preStage: App.preStage,
+    preStageParams: App.preStageParams[App.preStage] || {},
+    effect: App.activeId,
+    effectParams: activeState(),
+    effect2: App.effect2Id, // 'none' → the stack skips the second pass
+    effect2Params: effect2State(),
+    samplingCap: liveCap,
+  };
+  return overrides ? Object.assign(b, overrides) : b;
+}
+
+// The buffer the active effect samples from (staged), at
+// sampling resolution — used by export, which re-renders the effect at scale.
+function getSourceForActive() {
+  if (!App.srcImage) return null;
+  return App.stack.sourceFor(
+    App.srcImage,
+    singleBundle(),
+    App.canvasW,
+    App.canvasH,
+  );
+}
+
+// The paint half of the scheduler. One rule: requestAnimationFrame is the ONLY
+// thing that paints. Browsers suspend rAF whenever the page can't be seen — the
+// entire time the native file picker is open, on a tab switch, when a mobile
+// app is backgrounded — and Safari suspends it most aggressively. An earlier
+// fix papered over that with a setTimeout fallback that painted anyway; behind
+// the picker sheet that meant multi-second synchronous renders of the full
+// (possibly stacked) pipeline while invisible, which is exactly where Safari
+// froze and its memory watchdog started reloading the tab. Now a suspended rAF
+// simply leaves `_dirty` set with the last frame still on screen, and the wake
+// handlers in wireEvents() re-arm the paint the moment the page can be seen
+// again. Nothing here can wedge: `_dirty` is only cleared by an actual paint,
+// and rearmPaint() recovers even a dead armed frame.
+function markDirty() {
+  App._dirty = true;
+  armPaint();
+}
+
+function armPaint() {
+  if (!App.p || !App._dirty || App._raf) return;
+  if (performance.now() < App._paintHold) return; // see holdPaint()
+  App._raf = requestAnimationFrame(() => {
+    App._raf = 0;
+    if (!App._dirty) return;
+    App._dirty = false;
+    App.p.redraw(); // p5 noLoop(): runs draw() synchronously, exactly once
+  });
+}
+
+// Cancel a possibly-dead armed frame and re-arm from scratch. Safari's
+// back/forward cache can restore a page whose queued rAF callbacks were
+// silently dropped; without this, `_raf` would stay non-zero forever and
+// armPaint() would never schedule again — the old "frozen until reload" bug
+// in a new coat. Harmless when the armed frame is alive: it's re-requested.
+function rearmPaint() {
+  if (App._raf) {
+    cancelAnimationFrame(App._raf);
+    App._raf = 0;
+  }
+  armPaint();
+}
+
+// Suspend painting for a moment and drop any armed frame.
+//
+// A repaint runs the whole pipeline SYNCHRONOUSLY — on a large proof with a heavy
+// or stacked chain that's over a second, measured up to ~5.5s at EDGE_CAP. The
+// wake handlers in wireEvents() arm exactly such a repaint from a capture-phase
+// pointerdown, i.e. on the earliest event of a gesture, and a mouse press lasts
+// long enough (~60-150ms) for the browser to service that frame before it
+// dispatches the click. On a "Load image" press that put a multi-second render
+// between the press and the `#file-input` click that has to reach the native file
+// picker: the app froze and the picker didn't open. Holding across the gesture is
+// what fixes that.
+//
+// This can't wedge the proof — the exact failure this scheduler has been bitten by
+// before. The hold is a DEADLINE, not a flag: it lapses on its own, it re-arms
+// itself when it does, and it never touches `_dirty`, so a held paint is deferred
+// rather than lost. Worst case a repaint lands `ms` late.
+function holdPaint(ms) {
+  App._paintHold = performance.now() + ms;
+  if (App._raf) {
+    cancelAnimationFrame(App._raf);
+    App._raf = 0;
+  }
+  clearTimeout(App._holdTimer);
+  App._holdTimer = setTimeout(() => {
+    App._paintHold = 0;
+    armPaint(); // no-ops unless something is still owed
+  }, ms + 10);
+}
+
+function releasePaint() {
+  clearTimeout(App._holdTimer);
+  App._paintHold = 0;
+}
+
+function renderActive() {
+  const p = App.p;
+  if (!App.srcImage) return;
+  const t0 = performance.now();
+  p.push();
+  const eff = App.stack.renderInto(
+    p,
+    App.srcImage,
+    singleBundle(),
+    App.canvasW,
+    App.canvasH,
+  );
+  p.pop();
+  App._lastRenderMs = performance.now() - t0;
+  updateAsciiOverlay(eff, finalState());
+}
+
+/* ----------------------------------------------------------------
+   Source loading
+   ---------------------------------------------------------------- */
+const ANIMATED_FRAME_CAP = 1280;
+
+function friendlyMediaError(error) {
+  if (error?.name === "AbortError") return "";
+  if (error instanceof RangeError || error instanceof TypeError) return error.message;
+  return "Could not read that media file in this browser.";
+}
+
+function stopMediaPump() {
+  if (App.mediaPump) cancelAnimationFrame(App.mediaPump);
+  App.mediaPump = 0;
+  App.mediaPumpLast = 0;
+  if (App.mediaSource && App.mediaSource.kind === "gif") {
+    App.mediaSource.externallyDriven = false;
+  }
+}
+
+function disposeAnimatedSource() {
+  stopMediaPump();
+  App.mediaPlaying = false;
+  App._resumeOnVisible = false;
+  App._lastMediaFrame = -1;
+  App._lastMediaTime = -1;
+  if (App.mediaSource) {
+    try { App.mediaSource.dispose(); } catch { }
+  }
+  App.mediaSource = null;
+  if (App._srcOwned) App._srcOwned.remove();
+  App._srcOwned = null;
+  App.mediaKind = "image";
+  App.mediaVersion = 0;
+  updateMeta();
+  updateMediaControls();
+}
+
+function drawAnimatedFrame({ paint = true, onlyIfAdvanced = false } = {}) {
+  const source = App.mediaSource;
+  const frame = App._srcOwned;
+  if (!source || !frame) return false;
+  if (source.kind === "video" && source.element.readyState < 2) return false;
+  if (onlyIfAdvanced && !App._dirty) {
+    if (source.kind === "gif" && typeof source.currentFrame === "number") {
+      if (source.currentFrame === App._lastMediaFrame) {
+        updateMediaControls();
+        return false;
+      }
+    } else if (source.kind === "video") {
+      const ct = source.currentTime;
+      if (ct === App._lastMediaTime) {
+        updateMediaControls();
+        return false;
+      }
+    }
+  }
+  if (source.kind === "gif" && typeof source.currentFrame === "number") {
+    App._lastMediaFrame = source.currentFrame;
+  } else if (source.kind === "video") {
+    App._lastMediaTime = source.currentTime;
+  }
+  const ctx = frame.drawingContext;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, frame.width, frame.height);
+  ctx.drawImage(source.element, 0, 0, frame.width, frame.height);
+  ctx.restore();
+  App.mediaVersion += 1;
+  if (paint) {
+    if (App.exportBusy || (paint === "direct" && performance.now() >= App._paintHold)) {
+      paintNow();
+    } else {
+      markDirty();
+    }
+  }
+  updateMediaControls();
+  return true;
+}
+
+function animatedTargetFps() {
+  const source = App.mediaSource;
+  if (!source) return 15;
+  return computeTargetFps(source.fps, 15);
+}
+App.animatedTargetFps = animatedTargetFps;
+
+function startMediaPump() {
+  stopMediaPump();
+  if (!App.mediaPlaying || !App.mediaSource) return;
+  if (App.mediaSource.kind === "gif") {
+    App.mediaSource.externallyDriven = true;
+  }
+  const tick = (now) => {
+    App.mediaPump = 0;
+    if (!App.mediaPlaying || !App.mediaSource || document.hidden) return;
+    const interval = 1000 / animatedTargetFps();
+    if (!App.mediaPumpLast || now - App.mediaPumpLast >= interval - 4) {
+      if (typeof App.mediaSource.step === "function") {
+        App.mediaSource.step(now);
+      }
+      const rendered = drawAnimatedFrame({ paint: "direct", onlyIfAdvanced: true });
+      if (rendered) {
+        const after = performance.now();
+        const renderCost = after - now;
+        // Preserve at least min(32ms, 50% of renderCost) of main-thread idle time
+        // after heavy renders so UI controls and pointer events never starve.
+        const minIdle = renderCost > 16 ? Math.min(32, renderCost * 0.5) : 0;
+        const nextTarget = !App.mediaPumpLast
+          ? now + interval
+          : Math.max(now, App.mediaPumpLast + interval);
+        App.mediaPumpLast = Math.max(nextTarget, after + minIdle) - interval;
+      }
+    }
+    if (!App.mediaSource.playing && !App.mediaSource.loop) {
+      App.mediaPlaying = false;
+      updateMediaControls();
+      return;
+    }
+    App.mediaPump = requestAnimationFrame(tick);
+  };
+  App.mediaPump = requestAnimationFrame(tick);
+}
+
+async function setMediaPlaying(playing) {
+  const source = App.mediaSource;
+  if (!source || App.exportBusy) return;
+  if (!playing) {
+    source.pause();
+    App.mediaPlaying = false;
+    stopMediaPump();
+    drawAnimatedFrame({ onlyIfAdvanced: true });
+    updateMediaControls();
+    return;
+  }
+  if (source.currentTime >= source.duration - 0.01) await source.seek(0);
+  try {
+    await source.play();
+    App.mediaPlaying = true;
+    startMediaPump();
+  } catch (error) {
+    App.mediaPlaying = false;
+    note(error?.name === "NotAllowedError"
+      ? "Playback was blocked — press Play again."
+      : "Could not start media playback.");
+  }
+  updateMediaControls();
+}
+
+async function seekMedia(time) {
+  const source = App.mediaSource;
+  if (!source || App.exportBusy) return;
+  const resume = App.mediaPlaying;
+  if (source.kind === "video") source.pause();
+  await source.seek(time);
+  drawAnimatedFrame();
+  if (resume && source.kind === "video") await source.play();
+  updateMediaControls();
+}
+
+async function setAnimatedSource(source) {
+  disposeAnimatedSource();
+  App.mediaSource = source;
+  App.mediaKind = source.kind;
+  const fitted = fitWithin(source.width, source.height, ANIMATED_FRAME_CAP);
+  const frame = App.p.createGraphics(fitted.width, fitted.height);
+  frame.pixelDensity(1);
+  App._srcOwned = frame;
+  App.srcImage = frame;
+  App.srcDims = { w: source.width, h: source.height };
+  source.loop = true;
+  drawAnimatedFrame({ paint: false });
+  $("#empty").setAttribute("hidden", "");
+  $("#canvas-holder").removeAttribute("hidden");
+  const { w, h } = computeCanvasSize();
+  App.canvasW = w;
+  App.canvasH = h;
+  App.p.resizeCanvas(w, h, true);
+  markDirty();
+  updateMeta();
+  updateMediaControls();
+  const targetFps = animatedTargetFps();
+  const fpsLabel = Number.isInteger(targetFps) ? `${targetFps}` : Number(targetFps.toFixed(1));
+  note(`${source.kind === "gif" ? "GIF" : "Video"} loaded · ${source.fps > 15 ? "capped playback at" : "playback at"} ${ANIMATED_FRAME_CAP}px / ${fpsLabel} fps.`);
+  await setMediaPlaying(true);
+}
+
+async function loadFromFile(file) {
+  if (!file) return;
+  if (App.exportBusy) {
+    note("Finish or cancel the current export before loading new media.");
+    return;
+  }
+  const request = ++App.sourceLoadVersion;
+  App.mediaLoadAbort?.abort();
+  App.mediaLoadAbort = null;
+  // init() runs at module scope, but p5 defers setup() (and so `App.p`) to
+  // window.load — which waits on the webfont CSS and the analytics script. A
+  // press inside that window used to open the picker and then throw on
+  // App.p.loadImage, silently loading nothing.
+  if (!App.p) {
+    note("Still starting up — try that again in a moment.");
+    return;
+  }
+  const kind = detectMediaKind(file);
+  if (!kind) {
+    note("Choose an image, animated GIF, MP4, WebM, MOV or OGV file.");
+    return;
+  }
+  if (kind !== "image") {
+    try {
+      validateMediaFile(file, kind);
+      const controller = new AbortController();
+      App.mediaLoadAbort = controller;
+      note(`Loading ${kind === "gif" ? "GIF" : "video"}…`);
+      const source = kind === "gif"
+        ? await loadGifSource(file, { signal: controller.signal })
+        : await loadVideoSource(file, { signal: controller.signal });
+      if (controller.signal.aborted || request !== App.sourceLoadVersion) {
+        source.dispose();
+        return;
+      }
+      App.mediaLoadAbort = null;
+      await setAnimatedSource(source);
+    } catch (error) {
+      App.mediaLoadAbort = null;
+      const message = friendlyMediaError(error);
+      if (message) note(message);
+    }
+    return;
+  }
+
+  // Object URL, not FileReader→dataURL: the data-URL path held the whole file
+  // AND a ~1.4× base64 copy of it in memory just to hand p5 a source. On a
+  // phone photo that's tens of MB of avoidable peak, right when Safari's tab
+  // watchdog is most likely to answer a memory spike by reloading the page.
+  const url = URL.createObjectURL(file);
+  App.p.loadImage(
+    url,
+    (img) => {
+      URL.revokeObjectURL(url);
+      if (request !== App.sourceLoadVersion) {
+        img.remove?.();
+        return;
+      }
+      setSource(img);
+    },
+    () => {
+      URL.revokeObjectURL(url);
+      if (request !== App.sourceLoadVersion) return;
+      note("Could not read that image file.");
+    },
+  );
+}
+
+// Retained-source long-edge cap. The pipeline never samples the source above
+// SAMPLING_CAP — buildWorking downsamples it into the working buffer, and export
+// re-renders from that same buffer — so a full-res phone photo (often 50–400 MB
+// once decoded) is held for nothing. On memory-limited devices that overshoots
+// the tab's budget and the browser reloads the page (the "loading loop"), so we
+// downscale once on load. Kept ≥ SAMPLING_CAP so it never bottlenecks sampling.
+const SRC_CAP = 2560;
+
+// Downscale an over-cap image into a capped-size graphics; smaller images pass
+// through untouched. Aspect is preserved, so the proof/meta stay correct. The
+// graphics itself is the new source (setSource owns and removes it later) —
+// the old g.get() detour copied the downscale into ANOTHER full-size canvas
+// just to throw the first away, doubling peak memory on the load path. The
+// full-res decode is collectable either way once `img` goes out of scope.
+function fitSource(img) {
+  const long = Math.max(img.width, img.height);
+  if (long <= SRC_CAP) return img;
+  const k = SRC_CAP / long;
+  const w = Math.max(1, Math.round(img.width * k));
+  const h = Math.max(1, Math.round(img.height * k));
+  const g = App.p.createGraphics(w, h);
+  g.pixelDensity(1);
+  g.image(img, 0, 0, w, h);
+  return g;
+}
+
+function setSource(img) {
+  disposeAnimatedSource();
+  App.srcDims = { w: img.width, h: img.height }; // report the true upload size
+  const fitted = fitSource(img);
+  // fitSource or useDemo may hand us an offscreen graphics; keep exactly one
+  // alive so repeated loads don't stack dead source canvases (Safari frees them lazily).
+  if (App._srcOwned && App._srcOwned !== fitted) App._srcOwned.remove();
+  App._srcOwned = typeof fitted.remove === "function" ? fitted : null;
+  App.srcImage = fitted;
+  App.mediaKind = "image";
+  App.mediaVersion = 0;
+  $("#empty").setAttribute("hidden", "");
+  $("#canvas-holder").removeAttribute("hidden");
+  const { w, h } = computeCanvasSize();
+  App.canvasW = w;
+  App.canvasH = h;
+  App.p.resizeCanvas(w, h, true);
+  recompute();
+  updateMeta();
+  updateMediaControls();
+}
+
+// A generated demo "plate" so the tool works without an upload — smooth tones
+// for halftone/dither plus shapes and a wordmark for ASCII/stamp texture.
+function useDemo() {
+  if (!App.p) {
+    note("Still starting up — try that again in a moment.");
+    return;
+  }
+  App.sourceLoadVersion += 1;
+  App.mediaLoadAbort?.abort();
+  App.mediaLoadAbort = null;
+  const p = App.p;
+  const W = 1000,
+    H = 1250;
+  const g = p.createGraphics(W, H);
+  g.pixelDensity(1);
+  for (let y = 0; y < H; y++) {
+    g.stroke(40 + (y / H) * 175);
+    g.line(0, y, W, y);
+  }
+  g.noStroke();
+  const cx = W * 0.5,
+    cy = H * 0.4,
+    R = 360;
+  for (let r = R; r > 0; r -= 1.5) {
+    g.fill(255 * Math.pow(1 - r / R, 0.6));
+    g.circle(cx, cy, r * 2);
+  }
+  // colour accents so CMYK / RGB-split modes have something to separate
+  g.fill(198, 32, 58);
+  g.circle(W * 0.78, H * 0.72, 200); // crimson
+  g.fill(18, 142, 132);
+  g.circle(W * 0.24, H * 0.78, 160); // teal
+  g.fill(242, 172, 28);
+  g.circle(W * 0.21, H * 0.24, 130); // amber
+  g.fill(15);
+  g.textAlign(p.CENTER, p.CENTER);
+  g.textFont("Archivo");
+  g.textStyle(p.BOLD);
+  g.textSize(140);
+  g.text("HALFTONE", W * 0.5, H * 0.88);
+  setSource(g);
+}
+
+/* ----------------------------------------------------------------
+   UI building
+   ---------------------------------------------------------------- */
+function labeledRow(text, control) {
+  const row = document.createElement("div");
+  row.className = "row";
+  const top = document.createElement("div");
+  top.className = "field__top";
+  const l = document.createElement("span");
+  l.className = "field__label";
+  l.textContent = text;
+  top.appendChild(l);
+  row.appendChild(top);
+  row.appendChild(control);
+  return row;
+}
+
+// The bottom filmstrip IS the effect selector — one "film" per effect, each
+// with a small printer's motif thumbnail and a numbered caption. Clicking a film
+// applies that effect to the currently targeted slot (A or B); the highlight
+// follows the target and recolours (red → blue) to match it.
+function buildEffectChips() {
+  const root = $("#films");
+  root.classList.toggle("is-b", App.filmTarget === "B");
+  const sel = targetEffectId();
+  const existing = root.querySelectorAll(".film");
+  const nonColor = EFFECTS.filter((e) => e.category !== "color");
+
+  if (existing.length === nonColor.length) {
+    existing.forEach((film, i) => {
+      const e = nonColor[i];
+      const isSelected = e.id === sel;
+      film.classList.toggle("on", isSelected);
+      film.setAttribute("aria-selected", String(isSelected));
+    });
+    return;
+  }
+
+  root.innerHTML = "";
+  nonColor.forEach((e, i) => {
+    const film = document.createElement("button");
+    film.type = "button";
+    film.className = "film" + (e.id === sel ? " on" : "");
+    film.setAttribute("role", "tab");
+    film.setAttribute("aria-selected", String(e.id === sel));
+    film.innerHTML =
+      `<span class="thumb">${effectMotif(e.id, i)}</span>` +
+      `<span class="cap"><b>${e.no}</b><span>${e.name}</span></span>`;
+    film.addEventListener("click", () => applyPreset(e.id));
+    root.appendChild(film);
+  });
+}
+
+// Apply a filmstrip preset to whichever slot is targeted. For slot B, picking
+// None clears the second pass; picking anything else stacks it on A's output.
+function applyPreset(id) {
+  if (App.filmTarget === "B") {
+    App.effect2Id = id;
+    buildEffect2Panel();
+    buildFilmTargetToggle();
+    buildEffectChips();
+    updateSwapBtn();
+    updateMeta();
+    requestRender();
+  } else {
+    setEffect(id);
+  }
+}
+
+// The A / B toggle in the strip head — chooses which slot presets edit. Picking
+// B with no second effect yet adds one. Each active slot lights in its colour.
+function buildFilmTargetToggle() {
+  const root = $("#film-target");
+  if (!root) return;
+  const existing = root.querySelectorAll(".abtog__btn");
+  if (existing.length === 2) {
+    ["A", "B"].forEach((slot, i) => {
+      const b = existing[i];
+      const active = slot === App.filmTarget;
+      b.className = "abtog__btn" + (active ? " is-active" : "");
+      b.setAttribute("aria-selected", String(active));
+      if (slot === "B" && !isEffect2On() && !active) b.classList.add("is-empty");
+      b.title =
+        slot === "A"
+          ? "Target effect A"
+          : isEffect2On()
+            ? "Target effect B"
+            : "Target slot B — pick an effect to stack";
+    });
+    return;
+  }
+
+  root.innerHTML = "";
+  ["A", "B"].forEach((slot) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("role", "tab");
+    const active = slot === App.filmTarget;
+    b.className = "abtog__btn" + (active ? " is-active" : "");
+    b.setAttribute("aria-selected", String(active));
+    // Dim B when it holds no effect — unless it's the slot you're aiming at.
+    if (slot === "B" && !isEffect2On() && !active) b.classList.add("is-empty");
+    b.dataset.slot = slot;
+    b.textContent = slot;
+    b.title =
+      slot === "A"
+        ? "Target effect A"
+        : isEffect2On()
+          ? "Target effect B"
+          : "Target slot B — pick an effect to stack";
+    b.addEventListener("click", () => setFilmTarget(slot));
+    root.appendChild(b);
+  });
+}
+
+// Switch which slot the filmstrip edits. Slot B starts empty (None); choosing
+// it just aims the strip there so the next pick stacks onto A's output.
+function setFilmTarget(slot) {
+  App.filmTarget = slot;
+  buildFilmTargetToggle();
+  buildEffectChips();
+}
+
+// A tiny, on-brand SVG motif per effect for its filmstrip thumbnail. Static
+// (not a live render) — fast, and faithful to the design mockup. `idx` keeps
+// any internal pattern/gradient ids unique across films.
+function effectMotif(id, idx) {
+  // Resolve the live CSS tokens so thumbnails remain in the same five-colour
+  // system as the surrounding UI in both light and dark schemes.
+  const tokens = getComputedStyle(document.documentElement);
+  const P = tokens.getPropertyValue("--sheet").trim(),
+    A = tokens.getPropertyValue("--accent").trim(),
+    K = tokens.getPropertyValue("--sheet-ink").trim(),
+    S = tokens.getPropertyValue("--accent-2").trim();
+  const u = (s) => `${s}${idx}`;
+  const wrap = (inner) =>
+    `<svg viewBox="0 0 118 88" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">` +
+    `<rect width="118" height="88" fill="${P}"/>${inner}</svg>`;
+  switch (id) {
+    case "none":
+      return wrap(
+        `<rect x="24" y="20" width="70" height="48" fill="none" stroke="${K}" stroke-width="2"/>` +
+        `<line x1="24" y1="68" x2="94" y2="20" stroke="${K}" stroke-width="2"/>`,
+      );
+    case "halftone":
+      return wrap(
+        `<defs><pattern id="${u("hp")}" width="10" height="10" patternUnits="userSpaceOnUse">` +
+        `<circle cx="5" cy="5" r="3.6" fill="${A}"/></pattern></defs>` +
+        `<rect width="118" height="88" fill="url(#${u("hp")})" opacity=".92"/>`,
+      );
+    case "dither":
+      return wrap(
+        `<g fill="${K}">` +
+        [
+          [6, 8],
+          [16, 8],
+          [11, 16],
+          [26, 12],
+          [36, 20],
+          [46, 10],
+          [56, 26],
+          [20, 34],
+          [70, 14],
+          [84, 30],
+          [96, 18],
+          [40, 48],
+          [64, 54],
+          [100, 60],
+          [30, 64],
+          [80, 70],
+          [52, 74],
+        ]
+          .map(([x, y]) => `<rect x="${x}" y="${y}" width="4" height="4"/>`)
+          .join("") +
+        `</g>`,
+      );
+    case "ascii":
+      return wrap(
+        `<g font-family="monospace" font-size="13" fill="${K}">` +
+        `<text x="8" y="22">@%#*+=-:.</text><text x="8" y="40">#*+=-:. @%</text>` +
+        `<text x="8" y="58">+=-:.@%#*</text><text x="8" y="76">%#*+= :.@</text></g>`,
+      );
+    case "riso":
+      return wrap(
+        `<circle cx="45" cy="44" r="30" fill="${A}" opacity=".85"/>` +
+        `<circle cx="64" cy="50" r="30" fill="${K}" opacity=".5"/>`,
+      );
+    case "xerox":
+      return wrap(
+        `<g fill="${K}" opacity=".82"><rect x="14" y="16" width="90" height="6"/>` +
+        `<rect x="14" y="30" width="70" height="6"/><rect x="20" y="44" width="84" height="6"/>` +
+        `<rect x="14" y="58" width="60" height="6"/></g>`,
+      );
+    case "stamp":
+      return wrap(
+        `<rect x="26" y="20" width="66" height="48" fill="none" stroke="${K}" stroke-width="5"/>` +
+        `<circle cx="40" cy="34" r="3" fill="${K}"/><circle cx="80" cy="56" r="2.5" fill="${K}"/>` +
+        `<circle cx="60" cy="44" r="5" fill="${A}"/>`,
+      );
+    case "glitch":
+      return wrap(
+        `<rect x="0" y="18" width="118" height="12" fill="${A}" opacity=".8"/>` +
+        `<rect x="20" y="40" width="118" height="10" fill="${K}" opacity=".7"/>` +
+        `<rect x="-14" y="60" width="118" height="9" fill="${K}" opacity=".5"/>`,
+      );
+    case "rgb-shift":
+      return wrap(
+        `<circle cx="52" cy="44" r="24" fill="none" stroke="${A}" stroke-width="3"/>` +
+        `<circle cx="64" cy="44" r="24" fill="none" stroke="${K}" stroke-width="3"/>` +
+        `<circle cx="58" cy="48" r="24" fill="none" stroke="${S}" stroke-width="1.5"/>`,
+      );
+    case "pixel-sort":
+      return wrap(
+        `<g>` +
+        [
+          [14, A, 30, 0.9],
+          [26, K, 55, 0.7],
+          [38, K, 20, 0.5],
+          [50, A, 44, 0.8],
+          [62, K, 60, 0.6],
+          [74, K, 34, 0.7],
+          [86, A, 50, 0.5],
+          [98, K, 24, 0.6],
+        ]
+          .map(
+            ([x, c, h, o]) =>
+              `<rect x="${x}" y="${82 - h}" width="6" height="${h}" fill="${c}" opacity="${o}"/>`,
+          )
+          .join("") +
+        `</g>`,
+      );
+    case "gradient-map":
+      return wrap(
+        `<defs><linearGradient id="${u("gm")}" x1="0" y1="0" x2="1" y2="0">` +
+        `<stop offset="0" stop-color="${K}"/><stop offset=".5" stop-color="${A}"/>` +
+        `<stop offset="1" stop-color="${P}"/></linearGradient></defs>` +
+        `<rect x="10" y="22" width="98" height="44" fill="url(#${u("gm")})"/>`,
+      );
+    case "tone":
+      return wrap(
+        `<polyline points="14,74 104,14" fill="none" stroke="${S}" stroke-width="1" opacity=".5"/>` +
+        `<path d="M14,74 C44,72 46,28 104,14" fill="none" stroke="${A}" stroke-width="3"/>`,
+      );
+    case "hue-sat":
+      return wrap(
+        `<g>` +
+        [A, K, S, A, K, S]
+          .map(
+            (c, i) =>
+              `<rect x="${14 + i * 15}" y="22" width="13" height="44" fill="${c}" opacity="${[0.9, 0.8, 0.6, 0.7, 0.85, 0.5][i]}"/>`,
+          )
+          .join("") +
+        `</g>`,
+      );
+    case "emboss":
+      return wrap(
+        `<path d="M24,66 L59,22 L94,66 Z" fill="${S}" opacity=".35"/>` +
+        `<path d="M24,66 L59,22" stroke="${P}" stroke-width="4" fill="none"/>` +
+        `<path d="M59,22 L94,66 L24,66" stroke="${K}" stroke-width="4" fill="none"/>`,
+      );
+    case "tiles":
+      return wrap(
+        `<g>` +
+        [
+          [14, 12, 38, 30, K, 0.8],
+          [55, 12, 23, 64, A, 0.9],
+          [81, 12, 23, 24, S, 0.7],
+          [81, 39, 23, 37, K, 0.6],
+          [14, 45, 38, 31, A, 0.65],
+        ]
+          .map(([x, y, w, h, c, o]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}" opacity="${o}"/>`)
+          .join("") +
+        `</g>`,
+      );
+    default:
+      return wrap(
+        `<text x="59" y="50" text-anchor="middle" font-size="14" fill="${K}">${idx + 1}</text>`,
+      );
+  }
+}
+
+function buildParamPanel() {
+  const eff = activeEffect();
+  $("#param-title").textContent = eff.name;
+  $(".block--a .block-tools").hidden = !eff.params.length;
+  const root = $("#param-controls");
+  root.innerHTML = "";
+  if (!eff.params.length && eff.hint) {
+    const hint = document.createElement("p");
+    hint.className = "note";
+    hint.textContent = eff.hint;
+    root.appendChild(hint);
+  }
+  appendParams(root, eff.params, activeState(), onParamChange);
+}
+
+// Param change: if the param gates others' visibility, rebuild the panel so
+// showIf re-evaluates; then re-render.
+function onParamChange(key) {
+  const param = activeEffect().params.find((p) => p.key === key);
+  if (param && param.rebuildOnChange) buildParamPanel();
+  requestRender();
+}
+
+/* ----------------------------------------------------------------
+   Stage 04 — stacked second effect (runs on the first's output)
+   ---------------------------------------------------------------- */
+function makeTool(label, title, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "tool";
+  b.textContent = label;
+  if (title) b.title = title;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+// Builds the header tools and body of block B. With None selected it's just a
+// prompt to pick a second effect; with a real effect it mirrors block A (params,
+// Randomize/Reset). The effect itself is chosen from the filmstrip (target B) —
+// selecting None there clears it, so there's no separate Add/Remove button.
+function buildEffect2Panel() {
+  const tools = $("#effect2-tools");
+  const body = $("#param2-controls");
+  tools.innerHTML = "";
+  body.innerHTML = "";
+
+  const on = isEffect2On();
+  $("#block-effect2").classList.toggle("is-on", on);
+  $("#param2-title").textContent = effect2().name;
+
+  if (!on) {
+    const hint = document.createElement("p");
+    hint.className = "note note--add";
+    hint.textContent = "No second effect.";
+    body.appendChild(hint);
+    return;
+  }
+
+  tools.appendChild(
+    makeTool("Random", "Randomize second effect", doRandomize2),
+  );
+  tools.appendChild(makeTool("Reset", "Reset second effect", doReset2));
+  appendParams(body, effect2().params, effect2State(), onParam2Change);
+}
+
+function onParam2Change(key) {
+  const param = effect2().params.find((p) => p.key === key);
+  if (param && param.rebuildOnChange) buildEffect2Panel();
+  requestRender();
+}
+
+function doRandomize2() {
+  if (!App.srcImage) {
+    note("Load an image first.");
+    return;
+  }
+  randomizeInto(effect2().params, effect2State());
+  buildEffect2Panel();
+  requestRender();
+}
+
+function doReset2() {
+  App.states2[App.effect2Id] = defaultsOf(effect2().params);
+  buildEffect2Panel();
+  requestRender();
+}
+
+// Color pre-stage selector (None + each color module) + its own param group.
+function buildPreStageSelect() {
+  const root = $("#prestage-select");
+  root.innerHTML = "";
+  const sel = document.createElement("select");
+  sel.setAttribute("aria-label", "Color pre-stage");
+  const none = document.createElement("option");
+  none.value = "none";
+  none.textContent = "None";
+  sel.appendChild(none);
+  for (const m of EFFECTS.filter((e) => e.category === "color")) {
+    const o = document.createElement("option");
+    o.value = m.id;
+    o.textContent = m.name;
+    sel.appendChild(o);
+  }
+  sel.value = App.preStage;
+  sel.addEventListener("change", () => {
+    App.preStage = sel.value;
+    buildPreStageControls();
+    requestRender();
+  });
+  root.appendChild(labeledRow("Color pre-stage", sel));
+}
+
+// The pre-stage module's params (auto-generated) — written to preStageParams,
+// with their own rebuild-on-change handling, independent of the active effect.
+function buildPreStageControls() {
+  const root = $("#prestage-controls");
+  root.innerHTML = "";
+  if (App.preStage === "none") return;
+  const mod = EFFECTS.find((e) => e.id === App.preStage);
+  if (!mod) return;
+  appendParams(root, mod.params, App.preStageParams[mod.id], (key) => {
+    const param = mod.params.find((p) => p.key === key);
+    if (param && param.rebuildOnChange) buildPreStageControls();
+    requestRender();
+  });
+}
+
+function setEffect(id) {
+  App.activeId = id;
+  buildEffectChips();
+  buildParamPanel();
+  updateSwapBtn();
+  updateMeta();
+  requestRender();
+}
+
+function doRandomize() {
+  if (!App.srcImage) {
+    note("Load an image first.");
+    return;
+  }
+  randomizeInto(activeEffect().params, activeState());
+  buildParamPanel();
+  requestRender();
+}
+
+function doReset() {
+  App.states[App.activeId] = defaultsOf(activeEffect().params);
+  buildParamPanel();
+  requestRender();
+}
+
+/* ----------------------------------------------------------------
+   Export
+   ---------------------------------------------------------------- */
+function setExportProgress(value, label) {
+  const progress = Math.max(0, Math.min(1, Number(value) || 0));
+  $("#export-progress").hidden = false;
+  $("#export-progress-bar").value = progress;
+  $("#export-progress-value").textContent = `${Math.round(progress * 100)}%`;
+  if (label) $("#export-progress-label").textContent = label;
+}
+
+function setExportBusy(busy) {
+  App.exportBusy = busy;
+  $("#export-progress").hidden = !busy;
+  $("#export-cancel").disabled = !busy;
+  $("#file-input").disabled = busy;
+  ["#xbtn-print", "#xbtn-sep", "#xbtn-svg", "#xbtn-animated"].forEach((id) => {
+    $(id).disabled = busy;
+  });
+  updateMediaControls();
+}
+
+function waitForVideoEnd(video, signal) {
+  return new Promise((resolve, reject) => {
+    let timer = 0;
+    const clean = () => {
+      clearTimeout(timer);
+      video.removeEventListener("ended", done);
+      video.removeEventListener("timeupdate", checkTime);
+      video.removeEventListener("error", failed);
+      signal?.removeEventListener("abort", aborted);
+    };
+    const done = () => { clean(); resolve(); };
+    const failed = () => { clean(); reject(video.error || new Error("Video playback failed.")); };
+    const aborted = () => {
+      clean();
+      reject(signal.reason || new DOMException("Aborted", "AbortError"));
+    };
+    const checkTime = () => {
+      if (video.ended || (video.duration > 0 && video.currentTime >= video.duration - 0.05)) {
+        done();
+      }
+    };
+    video.addEventListener("ended", done, { once: true });
+    video.addEventListener("timeupdate", checkTime);
+    video.addEventListener("error", failed, { once: true });
+    signal?.addEventListener("abort", aborted, { once: true });
+
+    // Fallback timer: duration + 2.5s buffer prevents hanging if browser drops 'ended'
+    const maxWait = Math.max(3000, ((video.duration || 10) + 2.5) * 1000);
+    timer = setTimeout(done, maxWait);
+  });
+}
+
+function paintNow() {
+  if (App._raf) {
+    cancelAnimationFrame(App._raf);
+    App._raf = 0;
+  }
+  App._dirty = false;
+  App.p.redraw();
+}
+
+async function exportAnimatedVideo(signal) {
+  const source = App.mediaSource;
+  const previous = {
+    time: source.currentTime,
+    playing: App.mediaPlaying,
+    loop: source.loop,
+  };
+  source.pause();
+  App.mediaPlaying = false;
+  stopMediaPump();
+  source.loop = false;
+  await source.seek(0);
+  drawAnimatedFrame({ paint: false });
+  paintNow();
+
+  const targetFps = animatedTargetFps();
+
+  try {
+    const blob = await recordCanvasWebM({
+      canvas: App.p.canvas,
+      duration: source.duration,
+      fps: targetFps,
+      signal,
+      onProgress: (value) => setExportProgress(value, "Recording processed WebM…"),
+      play: async () => {
+        const ended = waitForVideoEnd(source.element, signal);
+        await source.play();
+        App.mediaPlaying = true;
+        startMediaPump();
+        await ended;
+      },
+      stop: () => {
+        source.pause();
+        App.mediaPlaying = false;
+        stopMediaPump();
+      },
+    });
+    if (signal.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+    const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+    downloadBlob(blob, `halftone-press_${App.activeId}.${ext}`);
+  } finally {
+    source.loop = previous.loop;
+    await source.seek(previous.time);
+    drawAnimatedFrame({ paint: false });
+    paintNow();
+    if (previous.playing && !signal.aborted) {
+      await source.play();
+      App.mediaPlaying = true;
+      startMediaPump();
+    }
+  }
+}
+
+async function exportAnimatedGif(signal) {
+  const source = App.mediaSource;
+  const previous = {
+    time: source.currentTime,
+    playing: App.mediaPlaying,
+  };
+  source.pause();
+  App.mediaPlaying = false;
+  stopMediaPump();
+
+  const outputSize = fitWithin(App.canvasW, App.canvasH, 720);
+  const exportCap = Math.max(outputSize.width, outputSize.height);
+  const exportG = App.p.createGraphics(outputSize.width, outputSize.height);
+  exportG.pixelDensity(1);
+  const exportCtx = exportG.drawingContext;
+  const frameCount = source.frameCount;
+  const delays = source.frameDelays;
+  const originalFps = Number(source.fps) || 15;
+  const shouldCapFps = originalFps > 15;
+
+  async function* frames() {
+    if (!shouldCapFps) {
+      for (let index = 0; index < frameCount; index++) {
+        if (signal.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+        source.renderFrame(index);
+        drawAnimatedFrame({ paint: false });
+        exportG.clear();
+        App.stack.renderInto(
+          exportG,
+          App.srcImage,
+          singleBundle({ samplingCap: exportCap }),
+          outputSize.width,
+          outputSize.height,
+        );
+        const pixels = exportCtx.getImageData(0, 0, outputSize.width, outputSize.height).data;
+        yield {
+          rgba: pixels,
+          delay: delays[index],
+          progress: (index + 1) / frameCount,
+        };
+      }
+    } else {
+      const targetFps = 15;
+      const duration = Math.max(0.01, Number(source.duration) || 0);
+      const exportFrameCount = Math.max(1, Math.round(duration * targetFps));
+      for (let index = 0; index < exportFrameCount; index++) {
+        if (signal.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+        const sampleTime = Math.min(index / targetFps, Math.max(0, duration - 0.0001));
+        source.renderAtTime(sampleTime);
+        drawAnimatedFrame({ paint: false });
+        exportG.clear();
+        App.stack.renderInto(
+          exportG,
+          App.srcImage,
+          singleBundle({ samplingCap: exportCap }),
+          outputSize.width,
+          outputSize.height,
+        );
+        const pixels = exportCtx.getImageData(0, 0, outputSize.width, outputSize.height).data;
+        const currentCentis = Math.round(((index + 1) * 100) / targetFps);
+        const previousCentis = Math.round((index * 100) / targetFps);
+        const delayMs = Math.max(20, (currentCentis - previousCentis) * 10);
+        yield {
+          rgba: pixels,
+          delay: delayMs,
+          progress: (index + 1) / exportFrameCount,
+        };
+      }
+    }
+  }
+
+  try {
+    const blob = await encodeGif({
+      width: outputSize.width,
+      height: outputSize.height,
+      frames: frames(),
+      signal,
+      onProgress: (value) => setExportProgress(value, "Encoding processed GIF…"),
+    });
+    if (signal.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+    downloadBlob(blob, `halftone-press_${App.activeId}.gif`);
+  } finally {
+    exportG.remove();
+    await source.seek(previous.time);
+    drawAnimatedFrame({ paint: false });
+    paintNow();
+    if (previous.playing && !signal.aborted) {
+      await source.play();
+      App.mediaPlaying = true;
+      startMediaPump();
+    }
+  }
+}
+
+async function doExportAnimated() {
+  if (!App.mediaSource || App.exportBusy) return;
+  const controller = new AbortController();
+  App.exportAbort = controller;
+  setExportBusy(true);
+  setExportProgress(0, App.mediaKind === "video"
+    ? "Preparing processed WebM…"
+    : "Preparing processed GIF…");
+  try {
+    if (App.mediaKind === "video") await exportAnimatedVideo(controller.signal);
+    else await exportAnimatedGif(controller.signal);
+    note(`Exported processed ${App.mediaKind === "video" ? "WebM" : "GIF"}.`);
+  } catch (error) {
+    if (error?.name === "AbortError") note("Animated export cancelled.");
+    else {
+      console.error(error);
+      note(error?.message || "Could not export animated media.");
+    }
+  } finally {
+    App.exportAbort = null;
+    setExportBusy(false);
+    openExportPanel();
+  }
+}
+
+// scale 1 = free Screen PNG; scale 2 = Print PNG (tier ≥ 1). The composition is
+// identical — exportPNG just renders the effect at scale× device resolution.
+function doExportPNG(scale) {
+  if (!App.srcImage) {
+    note("Load an image first.");
+    return;
+  }
+  const eff = activeEffect();
+  const src = getSourceForActive();
+  const second = isEffect2On()
+    ? { effect: effect2(), state: effect2State() }
+    : null;
+  const name = second ? `${eff.id}+${App.effect2Id}` : eff.id;
+  const w = App.canvasW * scale,
+    h = App.canvasH * scale;
+  exportPNG(
+    App.p,
+    eff,
+    src,
+    activeState(),
+    App.canvasW,
+    App.canvasH,
+    scale,
+    `halftone-press_${name}_${w}x${h}.png`,
+    second,
+  );
+  note(`Exported PNG · ${w}×${h}`);
+  closeExportPanel();
+}
+
+/* ----------------------------------------------------------------
+   Swap A ↔ B
+   ---------------------------------------------------------------- */
+function doSwap() {
+  if (!isEffect2On()) return;
+  const oldAId = App.activeId;
+  const oldBId = App.effect2Id;
+  App.activeId = oldBId;
+  App.effect2Id = oldAId;
+  // Params follow their effect across slots — EXCHANGE each id's A-side and
+  // B-side entries rather than copying references. Copying left states[id]
+  // and states2[id] pointing at the same object after a swap, silently
+  // coupling the two slots' params for that effect from then on.
+  [App.states[oldAId], App.states2[oldAId]] = [
+    App.states2[oldAId],
+    App.states[oldAId],
+  ];
+  if (oldBId !== oldAId)
+    [App.states[oldBId], App.states2[oldBId]] = [
+      App.states2[oldBId],
+      App.states[oldBId],
+    ];
+  buildEffectChips();
+  buildParamPanel();
+  buildEffect2Panel();
+  buildFilmTargetToggle();
+  updateSwapBtn();
+  updateMeta();
+  requestRender();
+}
+
+function updateSwapBtn() {
+  const btn = $("#btn-swap");
+  if (btn) btn.disabled = !isEffect2On();
+}
+
+// The active effect's separation plates, or null. Gated like SVG: a stacked
+// chain has no single set of plates, so it's disabled while slot B is on.
+function activeSeparations() {
+  if (isEffect2On()) return null;
+  const eff = activeEffect();
+  if (typeof eff.separations !== "function") return null;
+  const src = getSourceForActive();
+  if (!src) return null;
+  const list = eff.separations(src, activeState(), {
+    p: App.p,
+    w: App.canvasW,
+    h: App.canvasH,
+    slot: "sep", // scratch-pool namespace (see util/scratch.js)
+  });
+  return list && list.length ? list : null;
+}
+
+async function doExportSeparations() {
+  const plates = activeSeparations();
+  if (!plates) {
+    note("No separations for this effect.");
+    return;
+  }
+  const btn = $("#xbtn-sep");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Building…";
+  try {
+    const n = await exportSeparations(
+      App.p,
+      plates,
+      App.canvasW,
+      App.canvasH,
+      2, // tier 2 includes 2× resolution
+      `halftone-press_${App.activeId}_separations_2x.zip`,
+    );
+    note(`Exported ${n} separation plates · 2× ZIP.`);
+    closeExportPanel();
+  } catch (e) {
+    console.error(e);
+    closeExportPanel(); // surface the message — it lives in the rail, behind the panel
+    note("Couldn’t build the separations ZIP.");
+  } finally {
+    btn.textContent = label;
+    btn.disabled = false;
+  }
+}
+
+function doExportSVG() {
+  if (!App.srcImage) {
+    note("Load an image first.");
+    return;
+  }
+  if (isEffect2On()) {
+    closeExportPanel();
+    note("SVG isn’t available while a second effect is stacked.");
+    return;
+  }
+  const eff = activeEffect();
+  const res = exportSVG(
+    eff,
+    getSourceForActive(),
+    activeState(),
+    App.canvasW,
+    App.canvasH,
+    `halftone-press_${eff.id}.svg`,
+    App.p,
+  );
+  if (res.ok) {
+    note("Exported SVG (vector).");
+    closeExportPanel();
+  } else if (res.reason === "unsupported") {
+    closeExportPanel();
+    note("SVG isn’t 1:1 for these settings — export PNG instead.");
+  } else {
+    closeExportPanel();
+    note("SVG export isn’t available for this effect.");
+  }
+}
+
+/* ----------------------------------------------------------------
+   Export overlay — all exports are free. Buttons export directly; the only
+   gating left is availability (separations/SVG don't apply to every effect,
+   or to a stacked chain).
+   ---------------------------------------------------------------- */
+function getFocusableElements(container) {
+  const selector =
+    'button:not([disabled]), [href]:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  return Array.from(container.querySelectorAll(selector)).filter((el) => {
+    return !el.hasAttribute("hidden") && el.offsetParent !== null;
+  });
+}
+
+function openExportPanel() {
+  if (!App.srcImage) {
+    note("Load an image first.");
+    return;
+  }
+  const eff = activeEffect();
+  const stacked = isEffect2On();
+
+  // Color separations — available only when the active effect yields plates.
+  const plates = activeSeparations();
+  $("#xbtn-sep").disabled = !plates;
+  $("#xsep-desc").textContent = plates
+    ? `Download ${plates.length} ${eff.name} PNG plates in full resolution.`
+    : stacked
+      ? "Not available when effects are stacked."
+      : "Not available for this effect.";
+
+  // Vector SVG — needs a vector renderer and not a stacked chain.
+  const svgOk = !stacked && typeof eff.renderSVG === "function";
+  $("#xbtn-svg").disabled = !svgOk;
+  $("#xsvg-desc").textContent = svgOk
+    ? "Color separated vector, scalable to any size."
+    : stacked
+      ? "Not available when effects are stacked."
+      : "Not available for this effect.";
+
+  const animated = !!App.mediaSource;
+  const videoMime = preferredWebMMime();
+  const animatedSupported = App.mediaKind === "video"
+    ? !!videoMime && !!App.p.canvas.captureStream
+    : App.mediaKind === "gif" && typeof Worker !== "undefined";
+  const videoExtLabel = videoMime.includes("mp4") ? "MP4" : "WebM";
+  $("#xanimated-label").textContent = App.mediaKind === "video" ? "Video" : "Animated GIF";
+  $("#xbtn-animated").textContent = App.mediaKind === "video" ? `Download ${videoExtLabel}` : "Download GIF";
+  $("#xbtn-animated").disabled = App.exportBusy || !animated || !animatedSupported;
+  const targetFps = animatedTargetFps();
+  const fpsLabel = Number.isInteger(targetFps) ? `${targetFps}` : Number(targetFps.toFixed(1));
+  $("#xanimated-desc").textContent = !animated
+    ? "Load a GIF or video to export motion."
+    : animatedSupported
+      ? App.mediaKind === "video"
+        ? `Silent ${videoExtLabel} at ${fpsLabel} fps.`
+        : `Processed GIF at ${fpsLabel} fps, max 720px.`
+      : "Animated export is not supported in this browser.";
+
+  const panel = $("#xpanel");
+  if (panel.hasAttribute("hidden")) {
+    App._exportLastFocus = document.activeElement;
+  }
+  panel.removeAttribute("hidden");
+
+  const focusables = getFocusableElements(panel);
+  if (focusables.length) {
+    const closeBtn = $("#xpanel-close");
+    if (closeBtn && focusables.includes(closeBtn)) {
+      closeBtn.focus();
+    } else {
+      focusables[0].focus();
+    }
+  }
+}
+
+function closeExportPanel() {
+  if (App.exportBusy) return;
+  const panel = $("#xpanel");
+  if (panel.hasAttribute("hidden")) return;
+  panel.setAttribute("hidden", "");
+  const targetToFocus =
+    App._exportLastFocus &&
+    App._exportLastFocus !== document.body &&
+    typeof App._exportLastFocus.focus === "function"
+      ? App._exportLastFocus
+      : $("#btn-export");
+  App._exportLastFocus = null;
+  try {
+    targetToFocus?.focus();
+  } catch { }
+}
+
+/* ----------------------------------------------------------------
+   Misc UI
+   ---------------------------------------------------------------- */
+function updateMeta() {
+  const chain =
+    activeEffect().name + (isEffect2On() ? ` → ${effect2().name}` : "");
+  $("#meta-fx").textContent = chain;
+  const dims = App.srcDims || App.srcImage;
+  $("#meta-dims").textContent = App.srcImage
+    ? `${dims.w ?? dims.width}×${dims.h ?? dims.height}`
+    : "— × —";
+  $("#meta-media").textContent = App.mediaSource
+    ? `${App.mediaKind} · ${formatMediaTime(App.mediaSource.duration)}`
+    : "still";
+}
+
+function updateMediaControls() {
+  const source = App.mediaSource;
+  const root = $("#media-controls");
+  if (!root) return;
+  const hide = !source;
+  if (root.hidden !== hide) root.hidden = hide;
+  if (!source) return;
+  const time = Math.max(0, Math.min(source.currentTime || 0, source.duration || 0));
+  const playBtn = $("#media-play");
+  const playLabel = App.mediaPlaying ? "Pause" : "Play";
+  if (playBtn.textContent !== playLabel) playBtn.textContent = playLabel;
+  if (playBtn.disabled !== App.exportBusy) playBtn.disabled = App.exportBusy;
+
+  const seekEl = $("#media-seek");
+  if (seekEl.disabled !== App.exportBusy) seekEl.disabled = App.exportBusy;
+  const maxStr = String(source.duration || 0);
+  if (seekEl.max !== maxStr) seekEl.max = maxStr;
+  const valStr = String(time);
+  if (seekEl.value !== valStr) seekEl.value = valStr;
+
+  const timeEl = $("#media-time");
+  const timeText = `${formatMediaTime(time)} / ${formatMediaTime(source.duration)}`;
+  if (timeEl.textContent !== timeText) timeEl.textContent = timeText;
+
+  const loopEl = $("#media-loop");
+  if (loopEl.checked !== source.loop) loopEl.checked = source.loop;
+  if (loopEl.disabled !== App.exportBusy) loopEl.disabled = App.exportBusy;
+}
+
+function updateAsciiOverlay(eff, state) {
+  const pre = $("#ascii-text");
+  if (eff.id === "ascii" && state && state.showText && eff.lastText) {
+    if (pre.textContent !== eff.lastText) pre.textContent = eff.lastText;
+    if (pre.hidden) pre.hidden = false;
+  } else if (!pre.hidden) {
+    pre.hidden = true;
+  }
+}
+
+let noteTimer = null;
+let toastTimer = null;
+
+function showToast(msg) {
+  const t = $("#toast");
+  if (!t) return;
+  t.textContent = msg;
+  t.removeAttribute("hidden");
+  void t.offsetWidth;
+  t.classList.add("is-visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    t.classList.remove("is-visible");
+    setTimeout(() => {
+      if (!t.classList.contains("is-visible")) {
+        t.setAttribute("hidden", "");
+      }
+    }, 220);
+  }, 4000);
+}
+
+function note(msg) {
+  const el = $("#drop-note");
+  el.textContent = msg;
+  el.style.color = "";
+  el.style.fontWeight = "";
+  if (msg && msg !== "Your files stay in your browser and are not stored.") {
+    showToast(msg);
+  }
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => {
+    el.textContent = "Your files stay in your browser and are not stored.";
+    el.style.color = "";
+    el.style.fontWeight = "";
+  }, 6000);
+}
+
+/* ----------------------------------------------------------------
+   Events
+   ---------------------------------------------------------------- */
+function wireEvents() {
+  // How long painting stays suspended once a "Load image" press starts. Only has
+  // to outlast the press → picker hand-off; the change/cancel handlers below end
+  // it as soon as the picker resolves.
+  const PICKER_HOLD = 1200;
+
+  const fileInput = $("#file-input");
+  fileInput.addEventListener("change", (e) => {
+    releasePaint(); // picker resolved — setSource()'s repaint must not be held
+    loadFromFile(e.target.files[0]);
+    e.target.value = "";
+  });
+  // Picker dismissed with nothing chosen: resume, and pay off any paint the press
+  // deferred. (Not every browser fires `cancel`; the hold lapses regardless.)
+  fileInput.addEventListener("cancel", () => {
+    releasePaint();
+    rearmPaint();
+  });
+  ["#btn-upload", "#btn-upload-2"].forEach((s) => {
+    const btn = $(s);
+    // The window-capture pointerdown wake handler below has ALREADY armed a
+    // repaint by the time this runs — holdPaint() drops it before the browser can
+    // service that frame. Listeners on the button run in the same synchronous
+    // pointerdown dispatch as the window one, so no frame can slip in between:
+    // that's what makes this a fix and not a narrower race. See holdPaint().
+    btn.addEventListener("pointerdown", () => holdPaint(PICKER_HOLD));
+    btn.addEventListener("click", () => {
+      holdPaint(PICKER_HOLD); // also covers keyboard activation (no pointerdown)
+      fileInput.click();
+    });
+  });
+  ["#btn-demo", "#btn-demo-2"].forEach((s) =>
+    $(s).addEventListener("click", () => useDemo()),
+  );
+
+  $("#btn-randomize").addEventListener("click", doRandomize);
+  $("#btn-reset").addEventListener("click", doReset);
+  $("#btn-swap").addEventListener("click", doSwap);
+  $("#btn-export").addEventListener("click", openExportPanel);
+  $("#xpanel-close").addEventListener("click", closeExportPanel);
+  $("#xpanel-backdrop").addEventListener("click", closeExportPanel);
+  $("#xbtn-print").addEventListener("click", () => doExportPNG(2));
+  $("#xbtn-svg").addEventListener("click", doExportSVG);
+  $("#xbtn-sep").addEventListener("click", doExportSeparations);
+  $("#xbtn-animated").addEventListener("click", doExportAnimated);
+  $("#export-cancel").addEventListener("click", () => App.exportAbort?.abort());
+
+  $("#media-play").addEventListener("click", () => {
+    setMediaPlaying(!App.mediaPlaying);
+  });
+  let seekTimer = null;
+  $("#media-seek").addEventListener("input", (event) => {
+    const value = Number(event.target.value);
+    $("#media-time").textContent =
+      `${formatMediaTime(value)} / ${formatMediaTime(App.mediaSource?.duration)}`;
+    clearTimeout(seekTimer);
+    seekTimer = setTimeout(() => seekMedia(value), 70);
+  });
+  $("#media-loop").addEventListener("change", (event) => {
+    if (App.mediaSource) App.mediaSource.loop = event.target.checked;
+    updateMediaControls();
+  });
+
+  // Drag & drop anywhere
+  const empty = $("#empty");
+  ["dragenter", "dragover"].forEach((ev) =>
+    window.addEventListener(ev, (e) => {
+      e.preventDefault();
+      empty.classList.add("is-hover");
+    }),
+  );
+  ["dragleave", "dragend"].forEach((ev) =>
+    window.addEventListener(ev, (e) => {
+      if (e.relatedTarget === null) empty.classList.remove("is-hover");
+    }),
+  );
+  window.addEventListener("drop", (e) => {
+    e.preventDefault();
+    empty.classList.remove("is-hover");
+    const f = e.dataTransfer && e.dataTransfer.files[0];
+    if (f) loadFromFile(f);
+  });
+
+  // Focus trap for export modal dialog
+  const xpanel = $("#xpanel");
+  xpanel.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") {
+      const focusables = getFocusableElements(xpanel);
+      if (!focusables.length) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !xpanel.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last || !xpanel.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+  });
+
+  // Keyboard: R randomize, E export, Space play/pause animated media
+  window.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return; // don't shadow browser shortcuts (⌘R, Ctrl+R, …)
+    const tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "select" || tag === "textarea") return;
+    if (e.key === " " || e.code === "Space") {
+      if (App.mediaSource && $("#xpanel").hasAttribute("hidden")) {
+        if (tag === "button" || tag === "a") return;
+        e.preventDefault();
+        setMediaPlaying(!App.mediaPlaying);
+      }
+    } else if (e.key === "r" || e.key === "R") {
+      if ($("#xpanel").hasAttribute("hidden")) doRandomize();
+    } else if (e.key === "e" || e.key === "E") {
+      if ($("#xpanel").hasAttribute("hidden")) openExportPanel();
+    }
+    else if (e.key === "Escape") {
+      if (!$("#xpanel").hasAttribute("hidden")) {
+        e.preventDefault();
+        closeExportPanel();
+      }
+    }
+  });
+
+  // Wake handlers — the other half of the render scheduler. rAF is suspended
+  // while the page is hidden or the window unfocused (native file picker open,
+  // tab switch, app backgrounded), so a change made just before that leaves
+  // `_dirty` set and possibly a dead armed frame (back/forward-cache restores
+  // drop queued rAF callbacks). On every "page is usable again" signal: apply
+  // a resize that arrived while hidden, then re-arm the paint. Everything
+  // no-ops when there's nothing to do, so over-listening is harmless — the
+  // pointerdown listener is pure insurance that the first touch un-wedges the
+  // proof even on some future browser's unforeseen suspend behaviour.
+  const wake = () => {
+    if (App._resizePending && !document.hidden) applyResize();
+    rearmPaint();
+  };
+  // Becoming visible/focused again is the one wake that arrives WITH a gesture
+  // attached: the click that refocused the window is already in flight, and
+  // `focus` lands just before its pointerdown. Repainting right there means a
+  // synchronous multi-second pipeline run between that press and its click — and
+  // when the press is "Load image", the native picker is what gets starved. So
+  // defer this wake instead of painting into the gesture; holdPaint() re-arms
+  // itself, so the proof still refreshes, just a beat later. The pointerdown wake
+  // below stays immediate — holding there would lag the start of every drag.
+  const WAKE_HOLD = 250;
+  const wakeDeferred = () => {
+    if (App._resizePending && !document.hidden) applyResize();
+    holdPaint(WAKE_HOLD);
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (App.mediaPlaying && App.mediaSource && !App.exportBusy) {
+        App._resumeOnVisible = true;
+        App.mediaSource.pause();
+        App.mediaPlaying = false;
+        stopMediaPump();
+        updateMediaControls();
+      }
+      return;
+    }
+    wakeDeferred();
+    if (App._resumeOnVisible && App.mediaSource && !App.exportBusy) {
+      App._resumeOnVisible = false;
+      setMediaPlaying(true);
+    }
+  });
+  window.addEventListener("focus", wakeDeferred);
+  window.addEventListener("pageshow", wakeDeferred);
+  window.addEventListener("pointerdown", wake, true);
+
+  // Re-render once webfonts are ready (ASCII metrics depend on them)
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => requestRender());
+  }
+
+  // On desktop breakpoint / mouse input: scroll effects strip left or right on mousewheel up or down
+  wireFilmstripWheel({ strip: $(".strip"), films: $("#films") });
+}
+
+/* ----------------------------------------------------------------
+   Collapsible rail sections. Each block's header folds its body.
+   The header itself is a tap/click target, but the real controls it
+   holds (Randomize / Reset, the effect-B tools) must not trigger a fold.
+   ---------------------------------------------------------------- */
+function wireFolds() {
+  document.querySelectorAll(".block").forEach((block) => {
+    const head = block.querySelector(".block-head");
+    const btn = block.querySelector(".fold");
+    if (!head || !btn) return;
+    const toggle = () => {
+      const collapsed = block.classList.toggle("is-collapsed");
+      btn.setAttribute("aria-expanded", String(!collapsed));
+    };
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggle();
+    });
+    head.addEventListener("click", (e) => {
+      if (e.target.closest("button, a, input, select, .block-tools")) return;
+      toggle();
+    });
+  });
+}
+
+/* ----------------------------------------------------------------
+   Init
+   ---------------------------------------------------------------- */
+function init() {
+  buildPanel($("#preadjust-controls"), PRE_SCHEMA, App.pre, () => recompute());
+  buildPreStageSelect();
+  buildPreStageControls();
+  buildEffectChips();
+  buildFilmTargetToggle();
+  buildParamPanel();
+  buildEffect2Panel();
+  updateSwapBtn();
+  updateMeta();
+  updateMediaControls();
+  wireEvents();
+  wireFolds();
+  window.addEventListener("beforeunload", () => {
+    App.mediaLoadAbort?.abort();
+    App.exportAbort?.abort();
+    disposeAnimatedSource();
+  });
+}
+
+init();
+
+// Debug / automation handle — lets you inspect state from the console.
+window.__hp = App;
