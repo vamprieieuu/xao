@@ -1,12 +1,11 @@
 name: XAO Native AE Build
 on:
- push:
-  branches: [xao/recovery-baseline-2026-11-10]
- pull_request:
-  branches: [xao/recovery-baseline-2026-11-10]
  workflow_dispatch:
+permissions:
+ contents: write
 jobs:
- native-aex:
+ build:
+  name: Build XAO AEX
   runs-on: windows-2022
   steps:
    - uses: actions/checkout@v4
@@ -44,22 +43,24 @@ jobs:
       python ae/verify_aex.py $aex.FullName build/XAOAsciiPiPL.bin
       if ($LASTEXITCODE -ne 0) { throw "Strict AEX verification failed." }
       dumpbin /headers /exports /dependents $aex.FullName
-   - uses: actions/upload-artifact@v4
-     name: Upload XAO AEX
-     id: upload_aex
+   - name: Publish direct AEX release asset
+     uses: softprops/action-gh-release@v2
      with:
-      name: XAO_ASCII_AE2023_Windows_x64
-      path: build/bin/Release/XAO_ASCII.aex
-      if-no-files-found: error
-      retention-days: 30
-   - name: Publish direct download entry
+      tag_name: xao-build-${{ github.run_number }}
+      name: XAO AEX Build ${{ github.run_number }}
+      target_commitish: ${{ github.sha }}
+      body: Automated XAO native After Effects plugin build. The release asset is the raw .aex file (not a ZIP archive).
+      prerelease: true
+      draft: false
+      files: build/bin/Release/XAO_ASCII.aex
+      fail_on_unmatched_files: true
+   - name: Publish direct download link
      if: success()
      shell: pwsh
      env:
-      ARTIFACT_URL: ${{ steps.upload_aex.outputs.artifact-url }}
+      RELEASE_TAG: xao-build-${{ github.run_number }}
+      REPOSITORY: ${{ github.repository }}
      run: |
-      if (-not $env:ARTIFACT_URL) { throw "GitHub did not return the uploaded artifact URL." }
-      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## XAO plugin download"
-      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Download XAO_ASCII.aex]($env:ARTIFACT_URL)"
-      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "The download contains the verified XAO_ASCII.aex file."
+      $downloadUrl = "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_TAG/XAO_ASCII.aex"
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## XAO plugin"
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Download XAO_ASCII.aex]($downloadUrl)"
