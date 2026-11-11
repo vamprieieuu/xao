@@ -5,17 +5,21 @@ import struct
 import sys
 from pathlib import Path
 
+def pstr(value: bytes) -> bytes:
+    data = bytes([len(value)]) + value
+    return data + b"\\0" * ((-len(data)) % 4)
+
 EXPECTED = {
     b"dnik": b"TKFe",
-    b"eman": bytes([9]) + b"XAO ASCII",
-    b"gtac": bytes([7]) + b"Stylize",
+    b"eman": pstr(b"XAO ASCII"),
+    b"gtac": pstr(b"Stylize"),
     b"4668": b"EffectMain\0\0",
     b"RVPe": struct.pack("<I", 2),
     b"RVSe": struct.pack("<HH", 13, 28),
     b"REVe": struct.pack("<I", 0x00080001),
     b"OLGe": struct.pack("<I", 0x02000000),
     b"2LGe": struct.pack("<I", 0x08001400),
-    b"ANMe": bytes([9]) + b"XAO_ASCII",
+    b"ANMe": pstr(b"XAO_ASCII"),
     b"LFea": struct.pack("<I", 0),
 }
 def parse(data: bytes) -> dict[bytes, bytes]:
