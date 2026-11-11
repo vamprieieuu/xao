@@ -124,7 +124,8 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);
  float glyphScale=clampf(params_.glyphScale*(params_.characterSize/88.0f),.1f,1.5f);
  float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
- std::vector<float> glowMask,glowTemp;if(params_.glowEnabled){glowMask.assign((std::size_t)w*h,0.0f);glowTemp.resize(glowMask.size());}
+ const bool styleGlow=params_.visualStyle==AsciiVisualStyle::CGO;
+ std::vector<float> glowMask,glowTemp;if(params_.glowEnabled||styleGlow){glowMask.assign((std::size_t)w*h,0.0f);glowTemp.resize(glowMask.size());}
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.enableAncient||params_.enableEnglish||params_.enableArabic;
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
@@ -133,7 +134,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  if(candidates.empty())return;
  for(int y0=0,rowIndex=0;y0<h;++rowIndex){
   int rowHeight=cell;
-  if(params_.layoutMode==AsciiLayoutMode::LiquidPanels){
+  if(params_.layoutMode==AsciiLayoutMode::LiquidPanels||params_.visualStyle==AsciiVisualStyle::Liquid){
    const int minH=std::clamp(std::min(params_.panelMinHeight,params_.panelMaxHeight),1,8),maxH=std::clamp(std::max(params_.panelMinHeight,params_.panelMaxHeight),1,8);
    rowHeight=cell*(minH+(int)(hash32(params_.randomSeed^(std::uint32_t)rowIndex*0x9E3779B9u)%(std::uint32_t)(maxH-minH+1)));
   }
@@ -189,9 +190,16 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   float left=(x0+x1-dw)*.5f,top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
   Pixel fg=params_.colorize?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
+  if(params_.visualStyle==AsciiVisualStyle::Rainbow){
+   const float hue=std::fmod((float)ci*0.000013f+(float)time*0.18f+mean*0.22f,1.0f)*6.0f;
+   const float chroma=0.28f+0.72f*clamp01(mean),xh=chroma*(1.0f-std::fabs(std::fmod(hue,2.0f)-1.0f));
+   float rr=0,gg=0,bb=0;
+   if(hue<1){rr=chroma;gg=xh;}else if(hue<2){rr=xh;gg=chroma;}else if(hue<3){gg=chroma;bb=xh;}else if(hue<4){gg=xh;bb=chroma;}else if(hue<5){rr=xh;bb=chroma;}else{rr=chroma;bb=xh;}
+   fg.r=rr+0.12f;fg.g=gg+0.12f;fg.b=bb+0.12f;fg.a=1.0f;
+  }
   fg=scaled(fg,alpha);Pixel bg=params_.preserveCellAlpha?scaled(params_.paper,alpha):params_.paper;
   bool glowCell=false;
-  if(params_.glowEnabled){
+  if(params_.glowEnabled||styleGlow){
    bool categoryMatch=true;
    switch(params_.glowGlyphFilter){
     case AsciiGlowGlyphFilter::Letters:categoryMatch=!glyph->wordToken&&!glyph->numberToken&&isLetterCodepoint(glyph->codepoint);break;
@@ -215,7 +223,20 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   }
   y0=y1;
  }
- if(params_.glowEnabled&&!glowMask.empty()){
+ if(params_.visualStyle==AsciiVisualStyle::Threshold){
+  for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)={0,0,0,0};
+  const int rowStep=std::clamp(params_.thresholdRowSpacing,2,64),segment=std::clamp(params_.thresholdSegmentWidth,4,128);
+  const int barHeight=std::max(1,rowStep/3);const float threshold=clamp01(params_.thresholdLevel);
+  for(int y=0;y<h;y+=rowStep)for(int x=0;x<w;x+=segment){
+   const int xEnd=std::min(w,x+segment);float lum=0.0f;Pixel color{0,0,0,0};int count=0;
+   for(int sy=y;sy<std::min(h,y+rowStep);++sy)for(int sx=x;sx<xEnd;++sx){const Pixel& q=src.at(sx,sy);lum+=sampleChannel(q,AsciiChannelMode::Luma);color.r+=q.r;color.g+=q.g;color.b+=q.b;color.a+=q.a;++count;}
+   if(!count)continue;const float l=lum/(float)count;if(l<threshold)continue;
+   const int length=std::max(1,(int)std::lround((float)(xEnd-x)*clamp01((l-threshold)/std::max(0.001f,1.0f-threshold))));
+   const float inv=1.0f/(float)count;color.r*=inv;color.g*=inv;color.b*=inv;color.a*=inv;
+   for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=x;xx<std::min(x+length,w);++xx)dst.at(xx,yy)=color;
+  }
+ }
+ if((params_.glowEnabled||styleGlow)&&!glowMask.empty()){
   const int radius=std::clamp((int)std::lround(params_.glowRadius),0,64);
   blurGlowMask(glowMask,glowTemp,w,h,radius);
   const float intensity=clampf(params_.glowIntensity,0,5),ga=clamp01(params_.glowColor.a);

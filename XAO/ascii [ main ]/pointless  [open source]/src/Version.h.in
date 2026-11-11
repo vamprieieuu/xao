@@ -1,2 +1,0 @@
-#pragma once
-#define POINTLESS_VERSION "@PROJECT_VERSION@"

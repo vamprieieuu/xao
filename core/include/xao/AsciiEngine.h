@@ -18,6 +18,7 @@ enum class AsciiChannelMode : std::uint8_t { Luma=0, Red, Green, Blue };
 enum class AsciiGlowSelection : std::uint8_t { Random=0, FixedRegion, RandomInRegion, All };
 enum class AsciiGlowGlyphFilter : std::uint8_t { All=0, Letters, Numbers, Symbols, Words };
 enum class AsciiLayoutMode : std::uint8_t { Grid=0, LiquidPanels };
+enum class AsciiVisualStyle : std::uint8_t { Standard=0, CGO, Ghost, Liquid, Mosaic, Rainbow, Threshold };
 struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;
@@ -89,6 +90,10 @@ struct AsciiParams {
  AsciiGlowSelection glowSelection=AsciiGlowSelection::Random;
  AsciiGlowGlyphFilter glowGlyphFilter=AsciiGlowGlyphFilter::All;
  AsciiLayoutMode layoutMode=AsciiLayoutMode::Grid;
+ AsciiVisualStyle visualStyle=AsciiVisualStyle::Standard;
+ float thresholdLevel=0.48f;
+ int thresholdSegmentWidth=24;
+ int thresholdRowSpacing=8;
  int panelMinWidth=1;
  int panelMaxWidth=3;
  int panelMinHeight=1;
