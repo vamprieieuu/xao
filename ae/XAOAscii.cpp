@@ -58,7 +58,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_TOPICX("ASCII",0,P_TOPIC_MAIN);
  PF_ADD_POPUPX("ASCII Preset",22,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch|Arabic Script",0,P_PRESET);
- PF_ADD_POPUPX("Character Set",29,1,"Use Preset|Language Only|Fantasy Marks|Vampire Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed",0,P_CHARSET);
+ PF_ADD_POPUPX("Character Set",30,1,"Use Preset|Language Only|Fantasy Marks|Vampire Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed|Circles & Dots",0,P_CHARSET);
  PF_ADD_FLOAT_SLIDERX("ASCII Cells",2,512,2,512,8,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("ASCII Amount",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_AMOUNT);
  PF_ADD_FLOAT_SLIDERX("ASCII Strength",0,500,0,500,100,PF_Precision_INTEGER,0,0,P_STRENGTH);
@@ -122,13 +122,13 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_PRESET,[&](PF_ParamDef& p){preset=p.u.pd.value;});
  preset=std::clamp<A_long>(preset,1,22);
  if(preset<=10)xao::applyCratesPreset(state->ascii,(xao::AsciiPresetId)(preset-1));
- else if(preset==22){state->ascii.characterSet=xao::AsciiCharacterSetId::Count;state->ascii.randomCharacters=true;state->ascii.randomWords=false;state->ascii.randomTiming=true;state->ascii.arabicLetters=true;state->ascii.arabicNumbers=true;state->ascii.arabicWords=true;}
+ else if(preset==22){state->ascii.characterSet=xao::AsciiCharacterSetId::Count;state->ascii.randomCharacters=true;state->ascii.randomWords=true;state->ascii.randomTiming=true;state->ascii.arabicLetters=true;state->ascii.arabicNumbers=true;state->ascii.arabicWords=true;state->ascii.randomAmount=1.0f;state->ascii.randomSpeed=3.0f;}
  else{
   state->ascii.visualStyle=(xao::AsciiVisualStyle)(preset-10);
   switch(state->ascii.visualStyle){
    case xao::AsciiVisualStyle::CGO:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.55f;break;
    case xao::AsciiVisualStyle::Ghost:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.75f;state->ascii.colorize=true;break;
-   case xao::AsciiVisualStyle::Liquid:state->ascii.layoutMode=xao::AsciiLayoutMode::LiquidPanels;state->ascii.characterSet=xao::AsciiCharacterSetId::CratesJapanese;state->ascii.randomWords=false;state->ascii.randomCharacters=true;state->ascii.randomAmount=0.65f;break;
+   case xao::AsciiVisualStyle::Liquid:state->ascii.layoutMode=xao::AsciiLayoutMode::LiquidPanels;state->ascii.characterSet=xao::AsciiCharacterSetId::CratesJapanese;state->ascii.randomWords=true;state->ascii.randomCharacters=true;state->ascii.randomAmount=1.0f;state->ascii.presetCharacterSize=58.0f;state->ascii.panelMinWidth=2;state->ascii.panelMaxWidth=4;state->ascii.panelMinHeight=1;state->ascii.panelMaxHeight=2;break;
    case xao::AsciiVisualStyle::Mosaic:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.35f;break;
    case xao::AsciiVisualStyle::Rainbow:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.45f;break;
    case xao::AsciiVisualStyle::Threshold:state->ascii.thresholdLevel=0.08f;state->ascii.thresholdSegmentWidth=32;state->ascii.thresholdRowSpacing=8;break;
