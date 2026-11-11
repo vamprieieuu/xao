@@ -17,6 +17,7 @@ enum class AsciiMappingMode : std::uint8_t { Auto=0, ShapeMatch, LuminanceRamp, 
 enum class AsciiChannelMode : std::uint8_t { Luma=0, Red, Green, Blue };
 enum class AsciiGlowSelection : std::uint8_t { Random=0, FixedRegion, RandomInRegion, All };
 enum class AsciiGlowGlyphFilter : std::uint8_t { All=0, Letters, Numbers, Symbols, Words };
+enum class AsciiLayoutMode : std::uint8_t { Grid=0, LiquidPanels };
 struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;
@@ -87,6 +88,11 @@ struct AsciiParams {
  bool glowEnabled=false;
  AsciiGlowSelection glowSelection=AsciiGlowSelection::Random;
  AsciiGlowGlyphFilter glowGlyphFilter=AsciiGlowGlyphFilter::All;
+ AsciiLayoutMode layoutMode=AsciiLayoutMode::Grid;
+ int panelMinWidth=1;
+ int panelMaxWidth=3;
+ int panelMinHeight=1;
+ int panelMaxHeight=3;
  float glowIntensity=1.0f;
  float glowRadius=8.0f;
  float glowAmount=0.2f;
