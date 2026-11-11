@@ -50,14 +50,6 @@ float sampleChannel(const Pixel& p,AsciiChannelMode mode) noexcept{
  const float r=clamp01(p.r/p.a),g=clamp01(p.g/p.a),b=clamp01(p.b/p.a);
  switch(mode){case AsciiChannelMode::Red:return r;case AsciiChannelMode::Green:return g;case AsciiChannelMode::Blue:return b;default:return clamp01(.2126f*r+.7152f*g+.0722f*b);}
 }
-bool isLetterCodepoint(char32_t cp) noexcept{
- return (cp>=U'A'&&cp<=U'Z')||(cp>=U'a'&&cp<=U'z')||
-  (cp>=0x0370&&cp<=0x03FF)||(cp>=0x0600&&cp<=0x06FF)||
-  (cp>=0x1681&&cp<=0x169A)||(cp>=0x16A0&&cp<=0x16FF)||
-  (cp>=0x3040&&cp<=0x30FF)||(cp>=0x4E00&&cp<=0x9FFF)||
-  (cp>=0x10330&&cp<=0x1034A)||(cp>=0x10380&&cp<=0x103C3)||
-  (cp>=0x10900&&cp<=0x10915);
-}
 float srgbToLinear(float v) noexcept{return v<=.04045f?v/12.92f:std::pow((v+.055f)/1.055f,2.4f);}
 float maskAt(const GlyphBitmap& g,float u,float v,bool aa) noexcept{
  if(g.width<=0||g.height<=0||g.coverage.size()<(std::size_t)(g.width*g.height))return 0;
@@ -95,16 +87,12 @@ const GlyphBitmap* selectGlyph(const std::vector<const GlyphBitmap*>& candidates
  return shapeBest[(std::size_t)random%pool].glyph;
 }
 Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
-void blurGlowMask(std::vector<float>& mask,std::vector<float>& temp,int w,int h,int radius){
- if(radius<=0)return;
- for(int y=0;y<h;++y){float sum=0.0f;int left=0,right=-1;for(int x=0;x<w;++x){const int wantLeft=std::max(0,x-radius),wantRight=std::min(w-1,x+radius);while(right<wantRight){++right;sum+=mask[(std::size_t)y*w+right];}while(left<wantLeft){sum-=mask[(std::size_t)y*w+left];++left;}temp[(std::size_t)y*w+x]=sum/(float)(right-left+1);}}
- for(int x=0;x<w;++x){float sum=0.0f;int top=0,bottom=-1;for(int y=0;y<h;++y){const int wantTop=std::max(0,y-radius),wantBottom=std::min(h-1,y+radius);while(bottom<wantBottom){++bottom;sum+=temp[(std::size_t)bottom*w+x];}while(top<wantTop){sum-=temp[(std::size_t)top*w+x];++top;}mask[(std::size_t)y*w+x]=sum/(float)(bottom-top+1);}}
-}
+
 
 }
 const CratesPresetDefinition& cratesPreset(AsciiPresetId id) noexcept{auto i=(std::size_t)id;return kPresets[i<sizeof(kPresets)/sizeof(kPresets[0])?i:0];}
 std::string_view asciiCharacterSetName(AsciiCharacterSetId id) noexcept{
- static constexpr std::array<std::string_view,27> names{{"Special Characters and Letters","Special Characters and Numbers","Classic Typewriter","Japanese Characters","Binary","Minimal Punk","X's","Bubble Growth","Stars","Diamonds","Dots","Circuits 1","Circuits 2","Alien Font","Bars","Classic","Minimal","Detailed","Bourke","Braille","Katakana","Blocks","Quadrants","Box Drawing","ASCII Art Main Standard","ASCII Art Main Simple","ASCII Art Main Detailed"}};
+ static constexpr std::array<std::string_view,27> names{{"Fantasy Marks","Dark Numerals","Typewriter","Neo Tokyo","Binary Code","Punk Minimal","Cross Marks","Bubble Forms","Starfield","Diamond Signs","Dot Matrix","Circuit Lines I","Circuit Lines II","Alien Glyphs","Signal Bars","Classic Ramp","Minimal Ramp","Detailed Ramp","Bourke Ramp","Braille","Katakana","Block Mosaic","Quadrants","Box Drawing","ASCII Standard","ASCII Simple","ASCII Detailed"}};
  auto i=(std::size_t)id;return i<names.size()?names[i]:names[0];
 }
 std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept{
@@ -155,7 +143,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   float inv=1.0f/n;avg.r*=inv;avg.g*=inv;avg.b*=inv;avg.a*=inv;float mean=0;for(float v:target)mean+=v;mean/=64;
   if(params_.uniformLuma)for(float& v:target)v=mean;
   if(params_.reverseOrder)for(float& v:target)v=1-v;
-  if(params_.invert)for(float& v:target)if(v>=clamp01(params_.invertThreshold/100.0f))v=1-v;
+  if(params_.invert)for(float& v:target)if(v>=clamp01(params_.invertThreshold<=1.0f?params_.invertThreshold:params_.invertThreshold/100.0f))v=1-v;
   const float gamma=clampf(params_.gamma,0.1f,4.0f);
   for(float& v:target){v=std::pow(clamp01(applyAsciiToneMap(v,contrast,brightness)),1.0f/gamma);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
   std::uint32_t ci=hash32(params_.randomSeed^((std::uint32_t)rowIndex*0x9E3779B9u)^((std::uint32_t)colIndex*0x85EBCA6Bu));double time=std::max(0.0,ctx.timeSeconds);
