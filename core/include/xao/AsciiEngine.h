@@ -25,7 +25,7 @@ struct GlyphBitmap {
 struct GlyphAtlas { std::vector<GlyphBitmap> glyphs; };
 struct CratesPresetDefinition {
  AsciiPresetId id; const char* name; std::uint8_t cratesCharacterSet;
- float characterSize; float characterMargin; float cellMargin; bool antiAliasing; bool invert;
+ float characterSize; float characterMargin; float cellMargin; bool antiAliasing; bool invert; bool reverseOrder; bool uniformLuma;
  float tintStrength; Pixel tintColor; float invertThreshold; float smoothShading; float blendWithOriginal;
  float randomShuffle; float randomSpeed; float randomColorAmount; float xFlipThreshold;
 };
