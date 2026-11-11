@@ -131,5 +131,5 @@ PF_Err Smart(PF_InData* in,PF_OutData* out,PF_SmartRenderExtra* e){
  return err!=PF_Err_NONE?err:checkin;
 }
 }
-extern "C" DllExport PF_Err PluginDataEntryFunction2(void* pica_basicP,void* pica_add_piPL,void* pica_basic_suite,const char* host_name,const char* host_version){(void)pica_basicP;(void)pica_add_piPL;(void)pica_basic_suite;(void)host_name;(void)host_version;return PF_Err_NONE;}
+extern "C" DllExport int PluginDataEntryFunction2(void* inPtr,void* outPtr,int inFlags,int inReserved){(void)inPtr;(void)outPtr;(void)inFlags;(void)inReserved;return 0;}
 extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,PF_InData* in_data,PF_OutData* out_data,PF_ParamDef*[],PF_LayerDef*,void* extra){try{switch(cmd){case PF_Cmd_ABOUT:PF_SPRINTF(out_data->return_msg,"XAO ASCII 1.0\rNative CPU ASCII renderer");return PF_Err_NONE;case PF_Cmd_GLOBAL_SETUP:return Global(out_data);case PF_Cmd_PARAMS_SETUP:return Params(in_data,out_data);case PF_Cmd_SMART_PRE_RENDER:return Pre(in_data,out_data,static_cast<PF_PreRenderExtra*>(extra));case PF_Cmd_SMART_RENDER:return Smart(in_data,out_data,static_cast<PF_SmartRenderExtra*>(extra));default:return PF_Err_NONE;}}catch(const std::bad_alloc&){return PF_Err_OUT_OF_MEMORY;}catch(...){return PF_Err_INTERNAL_STRUCT_DAMAGED;}}
