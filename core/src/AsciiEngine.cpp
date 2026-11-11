@@ -204,5 +204,28 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   const float intensity=clampf(params_.glowIntensity,0,5),ga=clamp01(params_.glowColor.a);
   for(int y=0;y<h;++y)for(int x=0;x<w;++x){const float amount=clamp01(glowMask[(std::size_t)y*w+x]*intensity)*ga;if(amount<=1e-6f)continue;Pixel& p=dst.row(y)[x];p.r+=params_.glowColor.r*amount;p.g+=params_.glowColor.g*amount;p.b+=params_.glowColor.b*amount;p.a=std::max(p.a,amount);}
  }
+ if(params_.raysEnabled){
+  constexpr float pi=3.14159265358979323846f;
+  const float originX=clampf(params_.raysOriginX,0,1),originY=clampf(params_.raysOriginY,0,1);
+  const float spread=clampf(params_.raysSpread,1,360)*pi/180.0f;
+  const float angleOffset=params_.raysAngle*pi/180.0f;
+  const float rayCount=clampf(params_.raysCount,1,64);
+  const float sharpness=clampf(params_.raysSharpness,1,20);
+  const float length=clampf(params_.raysLength,0.01f,2.0f);
+  const float intensity=clampf(params_.raysIntensity,0,5),colorAlpha=clamp01(params_.raysColor.a);
+  const float aspectX=(float)w/(float)std::max(w,h),aspectY=(float)h/(float)std::max(w,h);
+  for(int y=0;y<h;++y)for(int x=0;x<w;++x){
+   const float dx=((x+0.5f)/(float)w-originX)*aspectX,dy=((y+0.5f)/(float)h-originY)*aspectY;
+   const float distance=std::sqrt(dx*dx+dy*dy);
+   if(distance>=length)continue;
+   float angle=std::remainder(std::atan2(dy,dx)-angleOffset,2.0f*pi);
+   if(spread<2.0f*pi-1e-4f&&std::fabs(angle)>spread*0.5f)continue;
+   const float spoke=std::pow(std::max(0.0f,std::cos(angle*rayCount)),sharpness);
+   const float radial=clamp01(1.0f-distance/length);
+   const float amount=clamp01(spoke*radial*intensity)*colorAlpha;
+   if(amount<=1e-6f)continue;
+   Pixel& p=dst.row(y)[x];p.r+=params_.raysColor.r*amount;p.g+=params_.raysColor.g*amount;p.b+=params_.raysColor.b*amount;p.a=std::max(p.a,amount);
+  }
+ }
 }
 } // namespace xao
