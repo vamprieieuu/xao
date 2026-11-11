@@ -60,7 +60,7 @@ PF_Err Global(PF_OutData* o){o->my_version=PF_VERSION(1,1,0,PF_Stage_DEVELOP,1);
 PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_POPUPX("Plugin Presets",10,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes",0,P_PRESET);
- PF_ADD_POPUPX("Character Set",25,1,"Use Preset|Crates: Special Characters and Letters|Crates: Special Characters and Numbers|Crates: Classic Typewriter|Crates: Japanese Characters|Crates: Binary|Crates: Minimal Punk|Crates: X's|Crates: Bubble Growth|Crates: Stars|Crates: Diamonds|Crates: Dots|Crates: Circuits 1|Crates: Circuits 2|Crates: Alien Font|Crates: Bars|S1: Classic|S1: Minimal|S1: Detailed|S1: Bourke|S1: Braille|S1: Katakana|S1: Blocks|S1: Quadrants|S1: Box Drawing",0,P_CHARSET);
+ PF_ADD_POPUPX("Character Set",28,1,"Use Preset|Crates: Special Characters and Letters|Crates: Special Characters and Numbers|Crates: Classic Typewriter|Crates: Japanese Characters|Crates: Binary|Crates: Minimal Punk|Crates: X's|Crates: Bubble Growth|Crates: Stars|Crates: Diamonds|Crates: Dots|Crates: Circuits 1|Crates: Circuits 2|Crates: Alien Font|Crates: Bars|S1: Classic|S1: Minimal|S1: Detailed|S1: Bourke|S1: Braille|S1: Katakana|S1: Blocks|S1: Quadrants|S1: Box Drawing|ASCII Art Main: Standard|ASCII Art Main: Simple|ASCII Art Main: Detailed",0,P_CHARSET);
  PF_ADD_FLOAT_SLIDERX("Cell Size",2,128,2,64,12,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("Glyph Scale",0.1,1.5,0.1,1.5,0.88,PF_Precision_TENTHS,0,0,P_SCALE);
  PF_ADD_FLOAT_SLIDERX("Character Size",10,200,10,200,100,PF_Precision_INTEGER,0,0,P_CHAR_SIZE);
