@@ -22,6 +22,7 @@ struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;
  bool numberToken=false;
+ bool familyToken=false;
  int width=8;
  int height=8;
  float sizeScale=1.0f;
