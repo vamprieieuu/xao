@@ -106,24 +106,26 @@ PF_Err Smart(PF_InData* in,PF_OutData* out,PF_SmartRenderExtra* e){
  if(!src||!dst||!src->data||!dst->data||src->width<=0||src->height<=0||dst->width<0||dst->height<0){
   err=PF_Err_BAD_CALLBACK_PARAM;
  }else{
-  AEFX_SuiteScoper<PF_WorldSuite2> worldSuite(in,kPFWorldSuite,kPFWorldSuiteVersion2,out);
-  PF_PixelFormat format=PF_PixelFormat_INVALID;
-  PF_PixelFormat outputFormat=PF_PixelFormat_INVALID;
-  err=worldSuite->PF_GetPixelFormat(src,&format);
-  if(err==PF_Err_NONE)err=worldSuite->PF_GetPixelFormat(dst,&outputFormat);
-  if(err==PF_Err_NONE&&format!=outputFormat)err=PF_Err_UNRECOGNIZED_PARAM_TYPE;
-  if(err==PF_Err_NONE){
-   xao::RenderContext context;
-   context.timeSeconds=in->time_scale?in->current_time/static_cast<double>(in->time_scale):0.0;
-   context.frame=in->time_step?in->current_time/in->time_step:0;
-   context.renderScale=in->downsample_x.den?static_cast<float>(in->downsample_x.num)/in->downsample_x.den:1.f;
-   switch(format){
-    case PF_PixelFormat_ARGB32:err=Render<PF_Pixel>(src,dst,*state,255.f,context);break;
-    case PF_PixelFormat_ARGB64:err=Render<PF_Pixel16>(src,dst,*state,32768.f,context);break;
-    case PF_PixelFormat_ARGB128:err=Render<PF_PixelFloat>(src,dst,*state,1.f,context);break;
-    default:err=PF_Err_UNRECOGNIZED_PARAM_TYPE;break;
+  try{
+   AEFX_SuiteScoper<PF_WorldSuite2> worldSuite(in,kPFWorldSuite,kPFWorldSuiteVersion2,out);
+   PF_PixelFormat format=PF_PixelFormat_INVALID;
+   PF_PixelFormat outputFormat=PF_PixelFormat_INVALID;
+   err=worldSuite->PF_GetPixelFormat(src,&format);
+   if(err==PF_Err_NONE)err=worldSuite->PF_GetPixelFormat(dst,&outputFormat);
+   if(err==PF_Err_NONE&&format!=outputFormat)err=PF_Err_UNRECOGNIZED_PARAM_TYPE;
+   if(err==PF_Err_NONE){
+    xao::RenderContext context;
+    context.timeSeconds=in->time_scale?in->current_time/static_cast<double>(in->time_scale):0.0;
+    context.frame=in->time_step?in->current_time/in->time_step:0;
+    context.renderScale=in->downsample_x.den?static_cast<float>(in->downsample_x.num)/in->downsample_x.den:1.f;
+    switch(format){
+     case PF_PixelFormat_ARGB32:err=Render<PF_Pixel>(src,dst,*state,255.f,context);break;
+     case PF_PixelFormat_ARGB64:err=Render<PF_Pixel16>(src,dst,*state,32768.f,context);break;
+     case PF_PixelFormat_ARGB128:err=Render<PF_PixelFloat>(src,dst,*state,1.f,context);break;
+     default:err=PF_Err_UNRECOGNIZED_PARAM_TYPE;break;
+    }
    }
-  }
+  }catch(const std::bad_alloc&){err=PF_Err_OUT_OF_MEMORY;}catch(...){err=PF_Err_INTERNAL_STRUCT_DAMAGED;}
  }
  PF_Err checkin=e->cb->checkin_layer_pixels?e->cb->checkin_layer_pixels(in->effect_ref,P_INPUT):PF_Err_NONE;
  return err!=PF_Err_NONE?err:checkin;
