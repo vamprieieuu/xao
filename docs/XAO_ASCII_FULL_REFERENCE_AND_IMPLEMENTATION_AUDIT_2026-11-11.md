@@ -171,7 +171,7 @@ Crates ASCII, S1 ASCII Art, OVN ASCII and L3tt3rM4pp3r2 are binary/decompilation
 
 ## 6. Fonts archive and packaging boundary
 
-The supplied `fonts.zip` contains 45 font files grouped into Arabic, English and Weird/ornamental families. The embedded font metadata includes multiple restricted or preview/print-only embedding flags and several explicit “All rights reserved” notices. Only one supplied font's metadata explicitly declares the SIL Open Font License (Sponge Arabic). The OS/2 embedding flag is not itself a redistribution license.
+The supplied `fonts.zip` contains 45 font files grouped into Arabic, English and Weird/ornamental families. A fresh metadata pass with fontTools found mixed OS/2 `fsType` embedding flags and a wide range of embedded license strings. **Rooyin Free Bold** (`fonts/arabic/Rooyin_Free_Bold.ttf`) is the font whose metadata explicitly declares the SIL Open Font License 1.1. **Sponge Arabic** is *not* OFL: its metadata declares the Yusuf Refaiy License. Other examples include WinSoft licensing for A Massir Ballpoint, personal-use-only notices for KA Hand Naskh, Takeaway, Flame On and others, and explicit no-redistribution/all-rights-reserved notices for some files. `fsType=0` does not itself grant redistribution rights, and the OS/2 embedding flags are not a substitute for the actual license terms.
 
 Therefore:
 - Do not bundle all 45 font files into XAO by default.
