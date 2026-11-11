@@ -11,8 +11,9 @@ enum class AsciiCharacterSetId : std::uint8_t {
  CratesSpecialLetters=0, CratesSpecialNumbers, CratesTypewriter, CratesJapanese, CratesBinary,
  CratesMinimalPunk, CratesXs, CratesBubbleGrowth, CratesStars, CratesDiamonds, CratesDots,
  CratesCircuits1, CratesCircuits2, CratesAlienFont, CratesBars,
- S1Classic, S1Minimal, S1Detailed, S1Bourke, S1Braille, S1Katakana, S1Blocks, S1Quadrants, S1BoxDrawing, Count
+ S1Classic, S1Minimal, S1Detailed, S1Bourke, S1Braille, S1Katakana, S1Blocks, S1Quadrants, S1BoxDrawing, AsciiArtMainStandard, AsciiArtMainSimple, AsciiArtMainDetailed, Count
 };
+enum class AsciiMappingMode : std::uint8_t { Auto=0, ShapeMatch, LuminanceRamp, EdgeDirectional };
 struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;
@@ -44,6 +45,9 @@ struct AsciiParams {
  float brightness=0.0f;
  float randomAmount=0.05f;
  float randomSpeed=0.0f;
+ float gamma=2.2f;
+ float edgeThreshold=0.15f;
+ AsciiMappingMode mappingMode=AsciiMappingMode::Auto;
  float randomTimingVariation=1.0f;
  std::uint32_t randomSeed=0;
  AsciiPresetId preset=AsciiPresetId::Default;

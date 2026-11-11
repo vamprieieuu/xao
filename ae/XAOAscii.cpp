@@ -27,7 +27,7 @@ enum {
  P_ANCIENT_LETTERS,P_ANCIENT_NUMBERS,P_ANCIENT_WORDS,
  P_ENGLISH_LETTERS,P_ENGLISH_NUMBERS,P_ENGLISH_WORDS,
  P_ARABIC_LETTERS,P_ARABIC_NUMBERS,P_ARABIC_WORDS,
- P_FONT,P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_COUNT
+ P_FONT,P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_MAPPING_MODE,P_GAMMA,P_EDGE_THRESHOLD,P_COUNT
 };
 enum { T_LINEAR=1,T_REC709=2,T_SRGB=3 };
 struct State { xao::AsciiParams ascii; A_long transfer=T_LINEAR; };
@@ -54,7 +54,7 @@ PF_Err Global(PF_OutData* o){o->my_version=PF_VERSION(1,1,0,PF_Stage_DEVELOP,1);
 
 PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_POPUPX("Plugin Presets",10,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes",0,P_PRESET);
- PF_ADD_POPUPX("Character Set",25,1,"Use Preset|Crates: Special Characters and Letters|Crates: Special Characters and Numbers|Crates: Classic Typewriter|Crates: Japanese Characters|Crates: Binary|Crates: Minimal Punk|Crates: X's|Crates: Bubble Growth|Crates: Stars|Crates: Diamonds|Crates: Dots|Crates: Circuits 1|Crates: Circuits 2|Crates: Alien Font|Crates: Bars|S1: Classic|S1: Minimal|S1: Detailed|S1: Bourke|S1: Braille|S1: Katakana|S1: Blocks|S1: Quadrants|S1: Box Drawing",0,P_CHARSET);
+ PF_ADD_POPUPX("Character Set",28,1,"Use Preset|Crates: Special Characters and Letters|Crates: Special Characters and Numbers|Crates: Classic Typewriter|Crates: Japanese Characters|Crates: Binary|Crates: Minimal Punk|Crates: X's|Crates: Bubble Growth|Crates: Stars|Crates: Diamonds|Crates: Dots|Crates: Circuits 1|Crates: Circuits 2|Crates: Alien Font|Crates: Bars|S1: Classic|S1: Minimal|S1: Detailed|S1: Bourke|S1: Braille|S1: Katakana|S1: Blocks|S1: Quadrants|S1: Box Drawing",0,P_CHARSET);
  PF_ADD_FLOAT_SLIDERX("Cell Size",2,128,2,64,12,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("Glyph Scale",0.1,1.5,0.1,1.5,0.88,PF_Precision_TENTHS,0,0,P_SCALE);
  PF_ADD_FLOAT_SLIDERX("Character Size",10,200,10,200,100,PF_Precision_INTEGER,0,0,P_CHAR_SIZE);
@@ -86,6 +86,9 @@ PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_POPUPX("Input Transfer",3,1,"Linear|Rec.709|sRGB",0,P_TRANSFER);
  PF_ADD_CHECKBOXX("Reverse Order",0,0,P_REVERSE_ORDER);
  PF_ADD_POPUPX("Uniform Luma",3,1,"Use Preset|Off|On",0,P_UNIFORM_LUMA);
+ PF_ADD_POPUPX("Mapping Mode",4,1,"Auto|Shape Match|Luminance Ramp|Edge Directional",0,P_MAPPING_MODE);
+ PF_ADD_FLOAT_SLIDERX("Gamma",0.5,4,0.5,4,2.2,PF_Precision_TENTHS,0,0,P_GAMMA);
+ PF_ADD_FLOAT_SLIDERX("Edge Threshold",0,1,0,1,0.15,PF_Precision_TENTHS,0,0,P_EDGE_THRESHOLD);
  out->num_params=P_COUNT;return PF_Err_NONE;
 }
 
@@ -132,6 +135,9 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_TRANSFER,[&](PF_ParamDef& p){state->transfer=p.u.pd.value;});
  read(P_REVERSE_ORDER,[&](PF_ParamDef& p){state->ascii.reverseOrder=p.u.bd.value!=0;});
  read(P_UNIFORM_LUMA,[&](PF_ParamDef& p){if(p.u.pd.value==2)state->ascii.uniformLuma=false;else if(p.u.pd.value==3)state->ascii.uniformLuma=true;});
+ read(P_MAPPING_MODE,[&](PF_ParamDef& p){state->ascii.mappingMode=(xao::AsciiMappingMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
+ read(P_GAMMA,[&](PF_ParamDef& p){state->ascii.gamma=(float)p.u.fs_d.value;});
+ read(P_EDGE_THRESHOLD,[&](PF_ParamDef& p){state->ascii.edgeThreshold=(float)p.u.fs_d.value;});
  if(err!=PF_Err_NONE){delete state;return err;}
  static const wchar_t* fontNames[]={L"Segoe UI Symbol",L"Consolas",L"IBM Plex Mono",L"VT323",L"Space Mono",L"Press Start 2P",L"Share Tech Mono",L"Courier Prime",L"IBM VGA",L"IBM EGA",L"Verite",L"DG One Bold"};
  fontIndex=std::clamp<A_long>(fontIndex,1,12);

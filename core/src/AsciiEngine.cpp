@@ -112,7 +112,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(params_.uniformLuma)for(float& v:target)v=mean;
   if(params_.reverseOrder)for(float& v:target)v=1-v;
   if(params_.invert)for(float& v:target)if(v>=clamp01(params_.invertThreshold/100.0f))v=1-v;
-  for(float& v:target){v=clamp01((v-.5f)*contrast+.5f+brightness);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
+  for(float& v:target){v=applyAsciiToneMap(v,contrast,brightness);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
   std::uint32_t ci=(std::uint32_t)((y0/cell)*((w+cell-1)/cell)+(x0/cell));double time=std::max(0.0,ctx.timeSeconds);
   bool animate=params_.randomCharacters||params_.randomWords;
   std::uint32_t slot=animate?(std::uint32_t)std::floor(time*(1.0+clampf(params_.randomSpeed,0,10)*24.0)):0u;

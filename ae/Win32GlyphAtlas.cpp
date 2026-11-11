@@ -76,7 +76,8 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
  void* bits=nullptr;HBITMAP bitmap=CreateDIBSection(dc,&bmi,DIB_RGB_COLORS,&bits,nullptr,0);
  if(!bitmap||!bits){if(bitmap)DeleteObject(bitmap);DeleteDC(dc);return builtinAsciiGlyphAtlas();}
  HGDIOBJ oldBitmap=SelectObject(dc,bitmap);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(255,255,255));
- const std::wstring fallbacks[]={family,L"Segoe UI Symbol",L"Segoe UI",L"Tahoma",L"Yu Gothic UI"};
+ const std::wstring preferred=(p.characterSet==AsciiCharacterSetId::S1Katakana)?L"Yu Gothic UI":family;
+ const std::wstring fallbacks[]={preferred,L"Yu Gothic UI",L"Meiryo",L"Segoe UI Symbol",L"Segoe UI",L"Tahoma"};
  auto atlas=std::make_shared<GlyphAtlas>();atlas->glyphs.reserve(tokens.size());std::vector<GlyphBitmap> s1Glyphs;
  for(const auto& token:tokens){
   HFONT chosen=nullptr;HGDIOBJ oldFont=nullptr;bool found=false;int height=token.word?-10:-19;
@@ -90,6 +91,8 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
  }
  SelectObject(dc,oldBitmap);DeleteObject(bitmap);DeleteDC(dc);
  if(!s1Glyphs.empty()){
+  if(p.characterSet==AsciiCharacterSetId::S1Detailed){for(auto& g:s1Glyphs)atlas->glyphs.push_back(std::move(g));}
+  else {
   std::size_t wanted=92;
   if(p.characterSet==AsciiCharacterSetId::S1Classic)wanted=10;
   else if(p.characterSet==AsciiCharacterSetId::S1Minimal)wanted=6;
@@ -104,6 +107,7 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
   }
   std::stable_sort(selected.begin(),selected.end(),[&](std::size_t a,std::size_t b){return s1Glyphs[a].density<s1Glyphs[b].density;});
   for(std::size_t idx:selected)atlas->glyphs.push_back(std::move(s1Glyphs[idx]));
+  }
  }
  if(atlas->glyphs.empty())return builtinAsciiGlyphAtlas();return atlas;
 }
