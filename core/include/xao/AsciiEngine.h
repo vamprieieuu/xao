@@ -43,6 +43,7 @@ struct AsciiParams {
  int cellSize=12;
  float glyphScale=0.88f;
  float characterSize=100.0f;
+ float presetCharacterSize=100.0f;
  float numberSize=100.0f;
  float wordSize=100.0f;
  float asciiAmount=100.0f;
