@@ -116,9 +116,11 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
 
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
- auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.ancientLetters||params_.ancientNumbers||params_.ancientWords||params_.englishLetters||params_.englishNumbers||params_.englishWords||params_.arabicLetters||params_.arabicNumbers||params_.arabicWords;
+ auto set=asciiCharacterSetCodepoints(params_.characterSet);
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
- for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!groups&&!set.empty()&&!g.wordToken&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
+ for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!g.familyToken&&!g.wordToken&&!set.empty()&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
+ int rampLimit=0;if(params_.characterSet==AsciiCharacterSetId::S1Classic)rampLimit=10;else if(params_.characterSet==AsciiCharacterSetId::S1Minimal)rampLimit=6;else if(params_.characterSet==AsciiCharacterSetId::S1Bourke)rampLimit=28;
+ if(rampLimit>0){std::vector<const GlyphBitmap*> base;for(auto* g:candidates)if(!g->familyToken&&!g->wordToken)base.push_back(g);std::sort(base.begin(),base.end(),[](const GlyphBitmap* a,const GlyphBitmap* b){return a->density<b->density;});if((int)base.size()>rampLimit){base.resize((std::size_t)rampLimit);candidates.erase(std::remove_if(candidates.begin(),candidates.end(),[&](const GlyphBitmap* g){return !g->familyToken&&!g->wordToken&&std::find(base.begin(),base.end(),g)==base.end();}),candidates.end());}}
  if(candidates.empty()){dst=src;return;}
  for(int y0=0,rowIndex=0;y0<h;++rowIndex){
   int rowHeight=cell;
