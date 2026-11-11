@@ -122,13 +122,12 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  if(src.empty())return;
  int w=src.width(),h=src.height(),cell=std::max(2,std::min(256,params_.cellSize));
  if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
- float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);
- float glyphScale=clampf(params_.glyphScale*(params_.characterSize/100.0f),.05f,3.0f);
+ float contrast=clampf(params_.contrast*(params_.asciiStrength/100.0f),0,4),brightness=clampf(params_.brightness,-1,1);
+ float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f);
  if(params_.visualStyle==AsciiVisualStyle::Micro)glyphScale*=0.68f;
  if(params_.visualStyle==AsciiVisualStyle::Photorealistic)glyphScale*=0.92f;
- float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
- const bool styleGlow=params_.visualStyle==AsciiVisualStyle::CGO||params_.visualStyle==AsciiVisualStyle::Mosaic;
- std::vector<float> glowMask,glowTemp;if(params_.glowEnabled||styleGlow){glowMask.assign((std::size_t)w*h,0.0f);glowTemp.resize(glowMask.size());}
+ float charMargin=params_.useCharacterMargin?clampf(params_.characterMargin/200.0f,0,.45f):0.0f,cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
+
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.enableAncient||params_.enableEnglish||params_.enableArabic;
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
@@ -169,7 +168,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   }
   std::uint32_t slot=animate?(std::uint32_t)std::floor(time*cellSpeed):0u;
   std::uint32_t rv=hash32(params_.randomSeed^hash32(ci+0x9e3779b9u)^hash32(slot));
-  const bool shapeMatch=params_.mappingMode==AsciiMappingMode::ShapeMatch||(params_.mappingMode==AsciiMappingMode::Auto&&params_.shapeMatch);
+  const bool shapeMatch=params_.mappingMode==AsciiMappingMode::ShapeMatch;
   const GlyphBitmap* glyph=nullptr;
   if(params_.mappingMode==AsciiMappingMode::EdgeDirectional){
    float gx=0.0f,gy=0.0f;
@@ -187,8 +186,11 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(params_.visualStyle==AsciiVisualStyle::Geometric){for(const auto* candidate:candidates){const char32_t cp=candidate->codepoint;if(cp==43||cp==42||cp==47||cp==92||cp==124||cp==60||cp==62||cp==94||cp==118||cp==91||cp==93||cp==123||cp==125||cp==40||cp==41||cp==35||cp==61||cp==45||cp==95||cp==46){glyph=candidate;break;}}}
   if(!glyph)continue;
   float cw=(float)(x1-x0),ch=(float)(y1-y0),aw=cw*(1-cellMargin),ah=ch*(1-cellMargin);
-  float numberScale=glyph->numberToken?clampf(params_.numberSize/100.0f,.1f,2.0f):1.0f;
-  float dw=std::max(1.0f,aw*glyphScale*numberScale*(1-charMargin)),dh=std::max(1.0f,ah*glyphScale*numberScale*(1-charMargin));
+  float tokenScale=clampf(glyph->sizeScale,0.1f,3.0f);
+  if(glyph->wordToken&&params_.useWordSize)tokenScale*=clampf(params_.wordSize/100.0f,0.1f,4.0f);
+  else if(glyph->numberToken&&params_.useNumberSize)tokenScale*=clampf(params_.numberSize/100.0f,0.1f,4.0f);
+  else if(!glyph->wordToken&&!glyph->numberToken&&params_.useCharacterSize)tokenScale*=clampf(params_.characterSize/100.0f,0.1f,4.0f);
+  float dw=std::max(1.0f,aw*glyphScale*tokenScale*(1-charMargin)),dh=std::max(1.0f,ah*glyphScale*tokenScale*(1-charMargin));
   const float glyphAspect=(glyph->height>0)?(float)glyph->width/(float)glyph->height:1.0f;
   const float cellAspect=aw/std::max(1.0f,ah);
   if(glyphAspect>cellAspect)dh=dw/glyphAspect;else dw=dh*glyphAspect;
@@ -200,9 +202,10 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   float top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
   if(glyph->wordToken&&drawX1>x1){Pixel wa{0,0,0,0};int wn=0;for(int yy=y0;yy<y1;++yy)for(int xx=x0;xx<drawX1;++xx){const Pixel& q=src.row(yy)[xx];wa.r+=q.r;wa.g+=q.g;wa.b+=q.b;wa.a+=q.a;++wn;}if(wn){float wi=1.0f/(float)wn;avg={wa.r*wi,wa.g*wi,wa.b*wi,wa.a*wi};}}
   if(params_.visualStyle==AsciiVisualStyle::Photorealistic){const Pixel& center=src.at((x0+x1)/2,(y0+y1)/2);const float m=0.16f;avg.r=avg.r*(1-m)+center.r*m;avg.g=avg.g*(1-m)+center.g*m;avg.b=avg.b*(1-m)+center.b*m;}
-  Pixel fg=params_.colorize?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
+  Pixel fg=(params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   if(params_.visualStyle==AsciiVisualStyle::Glitch){const float glitch=(float)((rv>>16)&255u)/255.0f;const float flicker=0.72f+0.28f*std::fabs(std::sin((float)time*18.0f+glitch*6.28318f));fg.r=clamp01(fg.r*(0.65f+glitch*0.9f));fg.g=clamp01(fg.g*(0.7f+(1.0f-glitch)*0.7f));fg.b=clamp01(fg.b*(0.75f+glitch*0.8f));fg=scaled(fg,flicker);}
+  if(params_.visualStyle==AsciiVisualStyle::CGO){const float accent=(float)(rv&255u)/255.0f;if(accent>0.78f){fg.r=std::max(fg.r,0.78f);fg.g=std::max(fg.g,0.16f+0.22f*accent);fg.b*=0.35f;}}
   if(params_.visualStyle==AsciiVisualStyle::Rainbow){
    const float hue=std::fmod((float)ci*0.000013f+(float)time*0.18f+mean*0.22f,1.0f)*6.0f;
    const float chroma=0.28f+0.72f*clamp01(mean),xh=chroma*(1.0f-std::fabs(std::fmod(hue,2.0f)-1.0f));
@@ -245,7 +248,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    }
   }
   bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
-  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);if(glowCell)glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],c*alpha);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
+  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c)*clamp01(params_.asciiAmount/100.0f);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
    x0=drawX1;
   }
   y0=y1;
@@ -271,7 +274,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    const float gray=.2126f*ink.r+.7152f*ink.g+.0722f*ink.b;
    ink.r=clamp01(ink.r*0.55f+gray*0.45f);ink.g=clamp01(ink.g*0.55f+gray*0.45f);ink.b=clamp01(ink.b*0.55f+gray*0.45f);
    const float boost=1.15f+(float)((tileSeed>>12)&255u)/255.0f*0.65f;ink.r=clamp01(ink.r*boost);ink.g=clamp01(ink.g*boost);ink.b=clamp01(ink.b*boost);ink=scaled(ink,alpha);
-   for(int yy=ty;yy<yEnd;++yy)for(int xx=tx;xx<xEnd;++xx){float u=((float)xx+0.5f-left)/std::max(1.0f,bw),v=((float)yy+0.5f-top)/std::max(1.0f,bh);if(u<0||u>1||v<0||v>1)continue;float cov=maskAt(*big,u,v,params_.antiAliasing);if(cov<=0.01f)continue;Pixel& q=dst.at(xx,yy);const float sa=cov*alpha,inv=1.0f-sa;q.r=q.r*inv+ink.r*cov;q.g=q.g*inv+ink.g*cov;q.b=q.b*inv+ink.b*cov;q.a=std::max(q.a,sa);if(!glowMask.empty())glowMask[(std::size_t)yy*w+xx]=std::max(glowMask[(std::size_t)yy*w+xx],cov*0.75f);}
+   for(int yy=ty;yy<yEnd;++yy)for(int xx=tx;xx<xEnd;++xx){float u=((float)xx+0.5f-left)/std::max(1.0f,bw),v=((float)yy+0.5f-top)/std::max(1.0f,bh);if(u<0||u>1||v<0||v>1)continue;float cov=maskAt(*big,u,v,params_.antiAliasing);if(cov<=0.01f)continue;Pixel& q=dst.at(xx,yy);const float sa=cov*alpha,inv=1.0f-sa;q.r=q.r*inv+ink.r*cov;q.g=q.g*inv+ink.g*cov;q.b=q.b*inv+ink.b*cov;q.a=std::max(q.a,sa);}
   }
  }
  if(params_.visualStyle==AsciiVisualStyle::Threshold){
