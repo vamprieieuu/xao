@@ -55,7 +55,7 @@ bool hasGlyph(HDC dc,const std::wstring& text){
  if(result==GDI_ERROR)return false;return std::find(glyphs.begin(),glyphs.end(),(WORD)0xFFFF)==glyphs.end();
 }
 std::wstring makeKey(const AsciiParams& p,const std::wstring& family){
- std::wstring k=family+L"|"+std::to_wstring((int)p.characterSet)+L"|"+std::to_wstring(p.randomSeed)+L"|"+(p.randomWords?L"1":L"0");
+ std::wstring k=family+L"|"+std::to_wstring((int)p.characterSet)+L"|"+(p.randomWords?L"1":L"0");
  const bool flags[]={p.enableAncient,p.enableEnglish,p.enableArabic,p.ancientLetters,p.ancientNumbers,p.ancientWords,p.englishLetters,p.englishNumbers,p.englishWords,p.arabicLetters,p.arabicNumbers,p.arabicWords};
  for(bool f:flags)k+=f?L"1":L"0";return k;
 }
@@ -150,7 +150,7 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
   for(std::size_t idx:selected)atlas->glyphs.push_back(std::move(s1Glyphs[idx]));
   }
  }
- if(atlas->glyphs.empty())return builtinAsciiGlyphAtlas();return atlas;
+ if(atlas->glyphs.empty())return std::make_shared<GlyphAtlas>();return atlas;
 }
 }
 std::shared_ptr<const GlyphAtlas> buildGlyphAtlas(const AsciiParams& params,const std::wstring& fontFamily){
