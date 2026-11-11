@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - xao/recovery-baseline-2026-11-10
-  workflow_dispatch:
 
 jobs:
   core-tests:
