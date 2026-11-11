@@ -39,7 +39,15 @@ if(XAO_BUILD_AE_PLUGIN)
  add_custom_command(OUTPUT "${PIPL_RC}" "${PIPL_BIN}"
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ae/generate_pipl.py" "${PIPL_RC}" "${PIPL_BIN}"
   DEPENDS ae/generate_pipl.py VERBATIM COMMENT "Generating XAO PiPL resource")
- add_library(XAO SHARED ae/XAOAscii.cpp ae/Win32GlyphAtlas.cpp "${PIPL_RC}")
+ file(GLOB_RECURSE XAO_FONT_FILES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/XAO/fonts/weird/*.ttf" "${CMAKE_CURRENT_SOURCE_DIR}/XAO/fonts/weird/*.otf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/XAO/fonts/english/*.ttf" "${CMAKE_CURRENT_SOURCE_DIR}/XAO/fonts/english/*.otf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/XAO/fonts/arabic/*.ttf" "${CMAKE_CURRENT_SOURCE_DIR}/XAO/fonts/arabic/*.otf")
+ set(FONTS_RC "${CMAKE_CURRENT_BINARY_DIR}/XAOFonts.rc")
+ add_custom_command(OUTPUT "${FONTS_RC}"
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ae/generate_font_resources.py" "${FONTS_RC}"
+  DEPENDS ae/generate_font_resources.py ${XAO_FONT_FILES} VERBATIM COMMENT "Embedding XAO language fonts")
+ add_library(XAO SHARED ae/XAOAscii.cpp ae/Win32GlyphAtlas.cpp "${PIPL_RC}" "${FONTS_RC}")
  target_link_libraries(XAO PRIVATE xao_core AESDK gdi32 user32 usp10)
  target_compile_features(XAO PRIVATE cxx_std_17)
  target_compile_definitions(XAO PRIVATE MSWindows _WINDOWS WIN32 _WIN32 _WIN64 _CRT_SECURE_NO_WARNINGS)
