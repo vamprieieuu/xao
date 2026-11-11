@@ -222,7 +222,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    if(params_.visualStyle==AsciiVisualStyle::Liquid){
     const float radius=std::max(1.0f,std::min(cw,ch)*0.18f),lx=(float)(x-x0)+0.5f,ly=(float)(y-y0)+0.5f;
     const float qx=std::max(radius-lx,std::max(0.0f,lx-(cw-radius))),qy=std::max(radius-ly,std::max(0.0f,ly-(ch-radius)));
-    const bool inside=qx*qx+qy*qy<=radius*radius;
+    const bool inside=qx*qx+qy*qy<=radius*radius;if(!inside)mask=0.0f;
     if(inside){const float panel=0.92f;Pixel panelColor=avg;float pa=std::max(avg.a,1.0e-6f);panelColor.r=clamp01(panelColor.r/pa);panelColor.g=clamp01(panelColor.g/pa);panelColor.b=clamp01(panelColor.b/pa);base.r=original.r*(1-panel)+panelColor.r*panel;base.g=original.g*(1-panel)+panelColor.g*panel;base.b=original.b*(1-panel)+panelColor.b*panel;}
    }
    const float opacity=clamp01(mask)*glyphOpacity;
