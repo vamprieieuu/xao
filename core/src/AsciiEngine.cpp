@@ -27,8 +27,8 @@ constexpr char32_t k4[]=U"01";
 constexpr char32_t k5[]=U" .:-=+*#%@";
 constexpr char32_t k6[]=U"Xx";
 constexpr char32_t k7[]=U"●○◉◎◌◍◦•∙·";
-constexpr char32_t k8[]=U".*+";
-constexpr char32_t k9[]=U"<>^v";
+constexpr char32_t k8[]=U"✦✧★☆✶✷✸✹✺*+.";
+constexpr char32_t k9[]=U"◆◇◈◊♦♢⬖⬗<>^v";
 constexpr char32_t k10[]=U".:;,+";
 constexpr char32_t k11[]=U"[]{}<>+-|_/";
 constexpr char32_t k12[]=U"[]{}<>+-|_=:/\\";
@@ -81,7 +81,15 @@ const GlyphBitmap* selectGlyph(const std::vector<const GlyphBitmap*>& candidates
  for(std::size_t i=0;i<shortlist;++i){const auto* g=candidates[start+i];float score=0.0f;for(int y=0;y<8;++y)for(int x=0;x<8;++x){float m=maskAt(*g,(x+.5f)/8.0f,(y+.5f)/8.0f,false);float q=target[(std::size_t)y*8+x]-m;score+=q*q;}std::size_t pos=count;while(pos>0&&best[pos-1].value>score){best[pos]=best[pos-1];--pos;}best[pos]={g,score};++count;}
  const std::size_t choose=std::min(count,pool);return best[(std::size_t)random%choose].glyph;
 }
-Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
+float maskAtStrength(const GlyphBitmap& g,float u,float v,bool aa,float strength) noexcept{
+  float base=maskAt(g,u,v,aa);
+  if(strength<=100.0f)return base*clamp01(strength/100.0f);
+  const float expand=0.018f+0.085f*clamp01((strength-100.0f)/400.0f);
+  float m=base;
+  for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){if(!x&&!y)continue;m=std::max(m,maskAt(g,u+x*expand,v+y*expand,aa));}
+  return clamp01(m);
+ }
+ Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
 
 
 }
@@ -195,6 +203,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   if(params_.visualStyle==AsciiVisualStyle::Glitch){const float glitch=(float)((rv>>16)&255u)/255.0f;const float flicker=0.72f+0.28f*std::fabs(std::sin((float)time*18.0f+glitch*6.28318f));fg.r=clamp01(fg.r*(0.65f+glitch*0.9f));fg.g=clamp01(fg.g*(0.7f+(1.0f-glitch)*0.7f));fg.b=clamp01(fg.b*(0.75f+glitch*0.8f));fg=scaled(fg,flicker);}
   if(params_.visualStyle==AsciiVisualStyle::CGO){const float accent=(float)(rv&255u)/255.0f;const float warm=(float)((rv>>8)&255u)/255.0f;fg.r=fg.r*0.28f+(0.36f+0.64f*warm)*0.72f;fg.g=fg.g*0.22f+(0.08f+0.34f*warm)*0.78f;fg.b=fg.b*0.28f+0.18f*0.72f;if(accent>0.68f){fg.r=1.0f;fg.g=0.36f+0.35f*warm;fg.b=0.16f;}}
+  if(params_.visualStyle==AsciiVisualStyle::Ghost){const float ray=0.5f+0.5f*std::sin(((float)x0+(float)y0*0.72f)*0.035f-(float)time*1.7f);fg.r=clamp01(fg.r*0.52f+0.42f+ray*0.24f);fg.g=clamp01(fg.g*0.42f+0.10f+ray*0.06f);fg.b=clamp01(fg.b*0.48f+0.22f+ray*0.16f);}
   if(params_.visualStyle==AsciiVisualStyle::Alien){const float v=(float)(rv&255u)/255.0f;const int band=(int)((rv>>8)%4u);const Pixel alien[4]={{0.20f,1.0f,0.30f,1},{0.0f,0.92f,0.82f,1},{0.58f,1.0f,0.08f,1},{0.28f,0.55f,1.0f,1}};const Pixel c=alien[band];const float pulse=0.72f+0.28f*std::fabs(std::sin((float)time*8.0f+v*6.28318f));fg.r=(fg.r*0.22f+c.r*0.78f)*pulse;fg.g=(fg.g*0.22f+c.g*0.78f)*pulse;fg.b=(fg.b*0.22f+c.b*0.78f)*pulse;}
   if(params_.visualStyle==AsciiVisualStyle::Rainbow){
    const std::uint32_t patch=hash32(params_.randomSeed^(std::uint32_t)(x0/std::max(1,cell*4))*0x9E3779B9u^(std::uint32_t)(y0/std::max(1,cell*4))*0x85EBCA6Bu);const float hue=std::fmod((float)(patch&0xFFFFu)/65535.0f*0.72f+(float)time*0.035f+mean*0.08f,1.0f)*6.0f;
@@ -214,13 +223,13 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
     auto channel=[&](std::uint8_t ca,std::uint8_t cb){return srgbToLinear(((float)ca*(1.0f-blend)+(float)cb*blend)/255.0f);};
     const Pixel color{channel(palette->colors[lo].r,palette->colors[hi].r),channel(palette->colors[lo].g,palette->colors[hi].g),channel(palette->colors[lo].b,palette->colors[hi].b),1.0f};
     const float amount=clampf(params_.paletteStrength/100.0f,0.0f,1.5f);
-    fg.r=fg.r*(1.0f-amount)+color.r*amount;fg.g=fg.g*(1.0f-amount)+color.g*amount;fg.b=fg.b*(1.0f-amount)+color.b*amount;
+    fg.r=clamp01(fg.r*(1.0f-amount)+color.r*amount);fg.g=clamp01(fg.g*(1.0f-amount)+color.g*amount);fg.b=clamp01(fg.b*(1.0f-amount)+color.b*amount);
    }
   }
   fg=scaled(fg,alpha);
   for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){
    const Pixel& original=src.row(y)[x];float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;
-   float mask=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0.0f;
+   float mask=(u>=0&&u<=1&&v>=0&&v<=1)?maskAtStrength(*glyph,u,v,params_.antiAliasing,params_.asciiStrength):0.0f;
    Pixel base=original;
    if(params_.visualStyle==AsciiVisualStyle::CGO)base=scaled(base,0.24f);
    if(params_.visualStyle==AsciiVisualStyle::Ghost)base=scaled(base,0.34f);
@@ -228,15 +237,15 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    if(params_.visualStyle==AsciiVisualStyle::Alien)base=scaled(base,0.32f);
    if(params_.visualStyle==AsciiVisualStyle::Glitch)base=scaled(base,0.28f);
    if(params_.visualStyle==AsciiVisualStyle::Liquid){
-    const float radius=std::max(1.0f,std::min(cw,ch)*0.18f),lx=(float)(x-x0)+0.5f,ly=(float)(y-y0)+0.5f;
+    const float radius=std::max(1.0f,std::min(cw,ch)*0.22f),lx=(float)(x-x0)+0.5f,ly=(float)(y-y0)+0.5f;
     const float qx=std::max(radius-lx,std::max(0.0f,lx-(cw-radius))),qy=std::max(radius-ly,std::max(0.0f,ly-(ch-radius)));
     const bool inside=qx*qx+qy*qy<=radius*radius;if(!inside)mask=0.0f;
-    if(inside){const float panel=0.92f;Pixel panelColor=avg;float pa=std::max(avg.a,1.0e-6f);panelColor.r=clamp01(panelColor.r/pa);panelColor.g=clamp01(panelColor.g/pa);panelColor.b=clamp01(panelColor.b/pa);base.r=original.r*(1-panel)+panelColor.r*panel;base.g=original.g*(1-panel)+panelColor.g*panel;base.b=original.b*(1-panel)+panelColor.b*panel;}
+    if(inside){const float panel=0.96f;Pixel panelColor=avg;float pa=std::max(avg.a,1.0e-6f);panelColor.r=clamp01(panelColor.r/pa);panelColor.g=clamp01(panelColor.g/pa);panelColor.b=clamp01(panelColor.b/pa);base.r=original.r*(1-panel)+panelColor.r*panel;base.g=original.g*(1-panel)+panelColor.g*panel;base.b=original.b*(1-panel)+panelColor.b*panel;}
    }
    float opacity=clamp01(mask)*glyphOpacity;
    if(params_.visualStyle==AsciiVisualStyle::CGO||params_.visualStyle==AsciiVisualStyle::Ghost||params_.visualStyle==AsciiVisualStyle::Rainbow||params_.visualStyle==AsciiVisualStyle::Alien||params_.visualStyle==AsciiVisualStyle::Glitch)opacity=clamp01(opacity*1.35f);
    Pixel ink=fg;
-   if(params_.visualStyle==AsciiVisualStyle::Liquid){const float lum=clamp01(.2126f*avg.r+.7152f*avg.g+.0722f*avg.b);const float text=(lum>0.52f)?0.10f:0.96f;ink={text,text,text,1.0f};}
+   if(params_.visualStyle==AsciiVisualStyle::Liquid){const float lum=clamp01(.2126f*avg.r+.7152f*avg.g+.0722f*avg.b);const float text=(lum>0.52f)?0.08f:0.98f;ink={text,text,text,1.0f};}
    else {const float lum=clamp01(.2126f*avg.r+.7152f*avg.g+.0722f*avg.b);const float gain=(lum>0.52f)?0.32f:1.55f;ink.r=clamp01(ink.r*gain);ink.g=clamp01(ink.g*gain);ink.b=clamp01(ink.b*gain);}
    Pixel r{base.r*(1-opacity)+ink.r*opacity,base.g*(1-opacity)+ink.g*opacity,base.b*(1-opacity)+ink.b*opacity,original.a};out[x]=r;
   }}
