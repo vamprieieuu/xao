@@ -101,7 +101,7 @@ PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_CHECKBOXX("Arabic Letters",0,0,P_ARABIC_LETTERS);
  PF_ADD_CHECKBOXX("Arabic Numbers",0,0,P_ARABIC_NUMBERS);
  PF_ADD_CHECKBOXX("Arabic Words",0,0,P_ARABIC_WORDS);
- PF_ADD_POPUPX("Arabic Font",23,1,"A Massir Ballpoint|A Naskh Tahrir|Arabic Childhood|Maqroo Arabick|Methlama Black|Milan Titles|Rooyin Bold|Sponge Arabic|Tajarib Black|Takeaway|Ummi Italic|ZIAN Black|Arslan Wessam A|Arslan Wessam B|A Bad Khat|Afsaneh Font|Afsaneh|Guesswhat|B Shekari|Digi Hilan|K Kamran|Ka Hand Naskh Mobile|Ka Hand Naskh|Nasma",0,P_ARABIC_FONT);
+ PF_ADD_POPUPX("Arabic Font",24,1,"A Massir Ballpoint|A Naskh Tahrir|Arabic Childhood|Maqroo Arabick|Methlama Black|Milan Titles|Rooyin Bold|Sponge Arabic|Tajarib Black|Takeaway|Ummi Italic|ZIAN Black|Arslan Wessam A|Arslan Wessam B|A Bad Khat|Afsaneh Font|Afsaneh|Guesswhat|B Shekari|Digi Hilan|K Kamran|Ka Hand Naskh Mobile|Ka Hand Naskh|Nasma",0,P_ARABIC_FONT);
  PF_ADD_CHECKBOXX("Enable Arabic Size",0,0,P_ARABIC_SIZE_ENABLE);
  PF_ADD_FLOAT_SLIDERX("Arabic Size",10,400,10,400,100,PF_Precision_INTEGER,0,0,P_ARABIC_SIZE);
  PF_ADD_POPUPX("Arabic Numerals",3,1,"Arabic-Indic|Persian|Western",0,P_ARABIC_NUM_STYLE);
@@ -183,7 +183,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_ARABIC_LETTERS,[&](PF_ParamDef& p){state->ascii.arabicLetters=p.u.bd.value!=0;});
  read(P_ARABIC_NUMBERS,[&](PF_ParamDef& p){state->ascii.arabicNumbers=p.u.bd.value!=0;});
  read(P_ARABIC_WORDS,[&](PF_ParamDef& p){state->ascii.arabicWords=p.u.bd.value!=0;});
- read(P_ARABIC_FONT,[&](PF_ParamDef& p){state->ascii.arabicFont=(std::uint8_t)std::clamp<A_long>(p.u.pd.value,1,23);});
+ read(P_ARABIC_FONT,[&](PF_ParamDef& p){state->ascii.arabicFont=(std::uint8_t)std::clamp<A_long>(p.u.pd.value,1,24);});
  read(P_ARABIC_SIZE_ENABLE,[&](PF_ParamDef& p){state->ascii.useArabicSize=p.u.bd.value!=0;});
  read(P_ARABIC_SIZE,[&](PF_ParamDef& p){state->ascii.arabicSize=(float)p.u.fs_d.value;});
  read(P_ARABIC_NUM_STYLE,[&](PF_ParamDef& p){state->ascii.arabicNumberStyle=(std::uint8_t)std::clamp<A_long>(p.u.pd.value-1,0,2);});
