@@ -17,7 +17,7 @@ enum class AsciiCharacterSetId : std::uint8_t {
 enum class AsciiMappingMode : std::uint8_t { Auto=0, ShapeMatch, LuminanceRamp, EdgeDirectional };
 enum class AsciiChannelMode : std::uint8_t { Luma=0, Red, Green, Blue };
 enum class AsciiLayoutMode : std::uint8_t { Grid=0, LiquidPanels };
-enum class AsciiVisualStyle : std::uint8_t { Standard=0, CGO, Ghost, Liquid, Mosaic, Rainbow, Threshold, Micro, Organic, Photorealistic, Geometric, Glitch };
+enum class AsciiVisualStyle : std::uint8_t { Standard=0, CGO, Ghost, Liquid, Mosaic, Rainbow, Threshold, Micro, Organic, Photorealistic, Geometric, Glitch, Alien };
 struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;
@@ -99,7 +99,7 @@ struct AsciiParams {
  float thresholdLevel=0.12f;
  int thresholdSegmentWidth=32;
  int thresholdRowSpacing=8;
- int panelMinWidth=2, panelMaxWidth=5, panelMinHeight=1, panelMaxHeight=2;
+ int panelMinWidth=2, panelMaxWidth=4, panelMinHeight=1, panelMaxHeight=2;
  Pixel tintColor{1,1,1,1};
  Pixel ink{1,1,1,1};
  Pixel paper{0,0,0,0};
