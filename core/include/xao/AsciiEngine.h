@@ -16,6 +16,7 @@ enum class AsciiCharacterSetId : std::uint8_t {
 enum class AsciiMappingMode : std::uint8_t { Auto=0, ShapeMatch, LuminanceRamp, EdgeDirectional };
 enum class AsciiChannelMode : std::uint8_t { Luma=0, Red, Green, Blue };
 enum class AsciiGlowSelection : std::uint8_t { Random=0, FixedRegion, RandomInRegion, All };
+enum class AsciiGlowGlyphFilter : std::uint8_t { All=0, Letters, Numbers, Symbols, Words };
 struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;
@@ -85,6 +86,7 @@ struct AsciiParams {
  float xFlipThreshold=0.0f;
  bool glowEnabled=false;
  AsciiGlowSelection glowSelection=AsciiGlowSelection::Random;
+ AsciiGlowGlyphFilter glowGlyphFilter=AsciiGlowGlyphFilter::All;
  float glowIntensity=1.0f;
  float glowRadius=8.0f;
  float glowAmount=0.2f;
