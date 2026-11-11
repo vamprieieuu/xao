@@ -92,7 +92,7 @@ Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
 }
 const CratesPresetDefinition& cratesPreset(AsciiPresetId id) noexcept{auto i=(std::size_t)id;return kPresets[i<sizeof(kPresets)/sizeof(kPresets[0])?i:0];}
 std::string_view asciiCharacterSetName(AsciiCharacterSetId id) noexcept{
- static constexpr std::array<std::string_view,27> names{{"Fantasy Marks","Dark Numerals","Typewriter","Neo Tokyo","Binary Code","Punk Minimal","Cross Marks","Bubble Forms","Starfield","Diamond Signs","Dot Matrix","Circuit Lines I","Circuit Lines II","Alien Glyphs","Signal Bars","Classic Ramp","Minimal Ramp","Detailed Ramp","Bourke Ramp","Braille","Katakana","Block Mosaic","Quadrants","Box Drawing","ASCII Standard","ASCII Simple","ASCII Detailed"}};
+ static constexpr std::array<std::string_view,27> names{{"Fantasy Marks","Vampire Numerals","Typewriter","Neo Tokyo","Binary Code","Punk Minimal","Cross Marks","Bubble Forms","Starfield","Diamond Signs","Dot Matrix","Circuit Lines I","Circuit Lines II","Alien Glyphs","Signal Bars","Classic Ramp","Minimal Ramp","Detailed Ramp","Bourke Ramp","Braille","Katakana","Block Mosaic","Quadrants","Box Drawing","ASCII Standard","ASCII Simple","ASCII Detailed"}};
  auto i=(std::size_t)id;return i<names.size()?names[i]:names[0];
 }
 std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept{
