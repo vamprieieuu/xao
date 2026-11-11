@@ -46,6 +46,12 @@ int main(){
  xao::AsciiEngine glowEngine(glowParams);glowEngine.render(glowSource,glowA,{});glowEngine.render(glowSource,glowB,{});
  for(std::size_t i=0;i<glowA.pixels().size();++i)if(!near(glowA.pixels()[i].r,glowB.pixels()[i].r)||!near(glowA.pixels()[i].a,glowB.pixels()[i].a))return fail("glow deterministic at same time");
  xao::AsciiParams noGlow=glowParams;noGlow.glowEnabled=false;xao::Image noGlowOut(8,8);xao::AsciiEngine noGlowEngine(noGlow);noGlowEngine.render(glowSource,noGlowOut,{});bool glowVisible=false;for(std::size_t i=0;i<glowA.pixels().size();++i)glowVisible|=!near(glowA.pixels()[i].r,noGlowOut.pixels()[i].r);if(!glowVisible)return fail("selective glow emission pass");
+ // Radial rays are deterministic and render independently of glyph glow.
+ xao::AsciiParams rayParams;rayParams.colorize=false;rayParams.raysEnabled=true;rayParams.raysCount=8;rayParams.raysSpread=360;rayParams.raysIntensity=5;rayParams.raysLength=1;rayParams.raysSharpness=1;
+ xao::Image raySource(8,8),rayA(8,8),rayB(8,8);for(auto& px:raySource.pixels())px={0,0,0,0};
+ xao::AsciiEngine rayEngine(rayParams);rayEngine.render(raySource,rayA,{});rayEngine.render(raySource,rayB,{});
+ bool raysVisible=false;for(std::size_t i=0;i<rayA.pixels().size();++i){raysVisible|=rayA.pixels()[i].r>0.01f;if(!near(rayA.pixels()[i].r,rayB.pixels()[i].r))return fail("radial rays deterministic");}
+ if(!raysVisible)return fail("radial ray pass renders visible beams");
  xao::AsciiParams preset;xao::applyCratesPreset(preset,xao::AsciiPresetId::Matrix);if(preset.characterSet!=xao::AsciiCharacterSetId::CratesBinary||!preset.randomCharacters)return fail("preset application");
  xao::AsciiParams rp=p;rp.randomCharacters=true;rp.randomAmount=0.8f;rp.randomTiming=true;rp.randomSpeed=1.0f;xao::AsciiEngine re(rp);xao::Image r0(32,16),r1(32,16),r2(32,16);xao::RenderContext c0;c0.timeSeconds=0; xao::RenderContext c1;c1.timeSeconds=0;xao::RenderContext c2;c2.timeSeconds=1;re.render(src,r0,c0);re.render(src,r1,c1);re.render(src,r2,c2);bool stable=true,animated=false;for(std::size_t i=0;i<r0.pixels().size();++i){stable&=near(r0.pixels()[i].r,r1.pixels()[i].r)&&near(r0.pixels()[i].a,r1.pixels()[i].a);animated|=!near(r0.pixels()[i].r,r2.pixels()[i].r)||!near(r0.pixels()[i].a,r2.pixels()[i].a);}if(!stable)return fail("random deterministic at same time");if(!animated)return fail("random timing advances");
  std::cout<<"XAO ASCII engine tests passed\n";return 0;
