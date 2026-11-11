@@ -12,7 +12,7 @@ enum class AsciiCharacterSetId : std::uint8_t {
  CratesMinimalPunk, CratesXs, CratesBubbleGrowth, CratesStars, CratesDiamonds, CratesDots,
  CratesCircuits1, CratesCircuits2, CratesAlienFont, CratesBars,
  S1Classic, S1Minimal, S1Detailed, S1Bourke, S1Braille, S1Katakana, S1Blocks, S1Quadrants, S1BoxDrawing,
- AsciiArtMainStandard, AsciiArtMainSimple, AsciiArtMainDetailed, Count
+ AsciiArtMainStandard, AsciiArtMainSimple, AsciiArtMainDetailed, CratesCircleDots, Count
 };
 enum class AsciiMappingMode : std::uint8_t { Auto=0, ShapeMatch, LuminanceRamp, EdgeDirectional };
 enum class AsciiChannelMode : std::uint8_t { Luma=0, Red, Green, Blue };
