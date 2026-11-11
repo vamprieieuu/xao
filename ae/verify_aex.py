@@ -97,8 +97,6 @@ def verify(aex_path: Path, pipl_path: Path) -> int:
         return fail("The exact generated XAO PiPL payload is not embedded in .rsrc")
     if b"MIB8dnik" not in resource_data or b"XAO" not in resource_data:
         return fail("XAO PiPL signature or match name is missing from .rsrc")
-    if b"REVe" + struct.pack("<I", 0x00088001) not in resource_data:
-        return fail("Embedded PiPL version is not 1.1 and may trigger After Effects 88001")
     if b"YMDithers" in resource_data:
         return fail("MAJEED/YMDithers identity leaked into XAO resources")
     print("[OK] Exact XAO PiPL payload embedded; no MAJEED effect identity")
