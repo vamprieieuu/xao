@@ -58,7 +58,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_TOPICX("XAO ASCII",0,P_TOPIC_MAIN);
  PF_ADD_TOPICX("ASCII Core",0,P_TOPIC_CORE);
- PF_ADD_POPUPX("ASCII Preset",21,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch",0,P_PRESET);
+ PF_ADD_POPUPX("ASCII Preset",22,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch|Arabic Script",0,P_PRESET);
  PF_ADD_POPUPX("Character Set",29,1,"Use Preset|Language Only|Fantasy Marks|Vampire Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed",0,P_CHARSET);
  PF_ADD_FLOAT_SLIDERX("ASCII Cells",2,512,2,512,12,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("ASCII Amount",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_AMOUNT);
@@ -124,8 +124,9 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  auto read=[&](A_long index,auto apply){if(err!=PF_Err_NONE)return;PF_ParamDef p;AEFX_CLR_STRUCT(p);PF_Err q=PF_CHECKOUT_PARAM(in,index,in->current_time,in->time_step,in->time_scale,&p);if(q!=PF_Err_NONE){err=q;return;}apply(p);PF_Err c=PF_CHECKIN_PARAM(in,&p);if(c!=PF_Err_NONE)err=c;};
  A_long preset=1;
  read(P_PRESET,[&](PF_ParamDef& p){preset=p.u.pd.value;});
- preset=std::clamp<A_long>(preset,1,21);
+ preset=std::clamp<A_long>(preset,1,22);
  if(preset<=10)xao::applyCratesPreset(state->ascii,(xao::AsciiPresetId)(preset-1));
+ else if(preset==22){state->ascii.characterSet=xao::AsciiCharacterSetId::Count;state->ascii.randomCharacters=true;state->ascii.randomWords=false;state->ascii.randomTiming=true;state->ascii.arabicLetters=true;state->ascii.arabicNumbers=true;state->ascii.arabicWords=true;}
  else{
   state->ascii.visualStyle=(xao::AsciiVisualStyle)(preset-10);
   switch(state->ascii.visualStyle){
@@ -177,9 +178,9 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_ENGLISH_FONT,[&](PF_ParamDef& p){state->ascii.englishFont=(std::uint8_t)std::clamp<A_long>(p.u.pd.value,1,10);});
  read(P_ENGLISH_SIZE_ENABLE,[&](PF_ParamDef& p){state->ascii.useEnglishSize=p.u.bd.value!=0;});
  read(P_ENGLISH_SIZE,[&](PF_ParamDef& p){state->ascii.englishSize=(float)p.u.fs_d.value;});
- read(P_ARABIC_LETTERS,[&](PF_ParamDef& p){state->ascii.arabicLetters=p.u.bd.value!=0;});
- read(P_ARABIC_NUMBERS,[&](PF_ParamDef& p){state->ascii.arabicNumbers=p.u.bd.value!=0;});
- read(P_ARABIC_WORDS,[&](PF_ParamDef& p){state->ascii.arabicWords=p.u.bd.value!=0;});
+ read(P_ARABIC_LETTERS,[&](PF_ParamDef& p){state->ascii.arabicLetters=p.u.bd.value!=0||preset==22;});
+ read(P_ARABIC_NUMBERS,[&](PF_ParamDef& p){state->ascii.arabicNumbers=p.u.bd.value!=0||preset==22;});
+ read(P_ARABIC_WORDS,[&](PF_ParamDef& p){state->ascii.arabicWords=p.u.bd.value!=0||preset==22;});
  read(P_ARABIC_FONT,[&](PF_ParamDef& p){state->ascii.arabicFont=(std::uint8_t)std::clamp<A_long>(p.u.pd.value,1,24);});
  read(P_ARABIC_SIZE_ENABLE,[&](PF_ParamDef& p){state->ascii.useArabicSize=p.u.bd.value!=0;});
  read(P_ARABIC_SIZE,[&](PF_ParamDef& p){state->ascii.arabicSize=(float)p.u.fs_d.value;});
