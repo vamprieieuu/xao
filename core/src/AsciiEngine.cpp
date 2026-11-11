@@ -256,7 +256,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    const int sx0=std::min(w-1,x+((int)phase+shift)%(std::max(1,segment/3)));
    for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=sx0;xx<std::min(w,sx0+length);++xx){Pixel bar=scaled(Pixel{barLuma,barLuma,barLuma,1.0f},alpha);Pixel& d=dst.at(xx,yy);const float invA=1.0f-bar.a;d={bar.r+d.r*invA,bar.g+d.g*invA,bar.b+d.b*invA,bar.a+d.a*invA};}
   }
-  const float fade=clamp01(params_.blendWithOriginal/100.0f);if(fade>0)for(int y=0;y<h;++y)for(int x=0;x<w;++x){Pixel& d=dst.at(x,y);const Pixel& o=src.at(x,y);d.r=d.r*(1-fade)+o.r*fade;d.g=d.g*(1-fade)+o.g*fade;d.b=d.b*(1-fade)+o.b*fade;d.a=d.a*(1-fade)+o.a*fade;}
+  const float fade=std::clamp(params_.blendWithOriginal/100.0f,0.0f,2.0f);if(fade>0)for(int y=0;y<h;++y)for(int x=0;x<w;++x){Pixel& d=dst.at(x,y);const Pixel& o=src.at(x,y);d.r=d.r*(1-fade)+o.r*fade;d.g=d.g*(1-fade)+o.g*fade;d.b=d.b*(1-fade)+o.b*fade;d.a=d.a*(1-fade)+o.a*fade;}
  }
 }
 } // namespace xao

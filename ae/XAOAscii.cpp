@@ -21,7 +21,7 @@
 namespace {
 enum {
  P_INPUT=0,
- P_TOPIC_CORE,P_PRESET,P_CHARSET,P_CELL,P_AMOUNT,P_FADE,P_STRENGTH,P_TOPIC_CORE_END,
+ P_TOPIC_CORE,P_PRESET,P_CHARSET,P_CELL,P_AMOUNT,P_USE_FADE,P_FADE,P_STRENGTH,P_TOPIC_CORE_END,
  P_TOPIC_SCALE,P_USE_CLIP_SCALE,P_CLIP_SCALE,P_USE_CHAR_SIZE,P_CHAR_SIZE,P_USE_NUMBER_SIZE,P_NUMBER_SIZE,
  P_USE_WORD_SIZE,P_WORD_SIZE,P_USE_CHAR_MARGIN,P_CHAR_MARGIN,P_CELL_MARGIN,P_TOPIC_SCALE_END,
  P_TOPIC_RANDOM,P_RANDOM_CHAR,P_RANDOM_WORD,P_RANDOM_TIMING,P_RANDOM_AMOUNT,P_RANDOM_SPEED,P_RANDOM_SEED,P_RANDOM_VARIATION,P_TOPIC_RANDOM_END,
@@ -61,7 +61,8 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_POPUPX("Character Set",29,1,"Use Preset|Language Only|Fantasy Marks|Vampire Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed",0,P_CHARSET);
  PF_ADD_FLOAT_SLIDERX("ASCII Cells",2,512,2,512,12,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("ASCII Amount",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_AMOUNT);
- PF_ADD_FLOAT_SLIDERX("ASCII Fade",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_FADE);
+ PF_ADD_CHECKBOXX("Override Preset Fade",0,0,P_USE_FADE);
+ PF_ADD_FLOAT_SLIDERX("ASCII Fade",0,200,0,200,0,PF_Precision_INTEGER,0,0,P_FADE);
  PF_ADD_FLOAT_SLIDERX("ASCII Strength",0,200,0,200,100,PF_Precision_INTEGER,0,0,P_STRENGTH);
  PF_END_TOPIC(P_TOPIC_CORE_END);
  PF_ADD_TOPICX("Scale & Spacing",PF_ParamFlag_START_COLLAPSED,P_TOPIC_SCALE);
@@ -156,7 +157,8 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_CHARSET,[&](PF_ParamDef& p){if(p.u.pd.value==2)state->ascii.characterSet=xao::AsciiCharacterSetId::Count;else if(p.u.pd.value>2)state->ascii.characterSet=(xao::AsciiCharacterSetId)std::clamp<A_long>(p.u.pd.value-3,0,(A_long)xao::AsciiCharacterSetId::Count-1);});
  read(P_CELL,[&](PF_ParamDef& p){state->ascii.cellSize=(int)p.u.fs_d.value;});
  read(P_AMOUNT,[&](PF_ParamDef& p){state->ascii.asciiAmount=(float)p.u.fs_d.value;});
- read(P_FADE,[&](PF_ParamDef& p){state->ascii.asciiFade=(float)p.u.fs_d.value;state->ascii.blendWithOriginal=std::clamp(state->ascii.blendWithOriginal+(float)p.u.fs_d.value,0.0f,100.0f);});
+ bool overrideFade=false;read(P_USE_FADE,[&](PF_ParamDef& p){overrideFade=p.u.bd.value!=0;});
+ read(P_FADE,[&](PF_ParamDef& p){state->ascii.asciiFade=(float)p.u.fs_d.value;if(overrideFade)state->ascii.blendWithOriginal=(float)p.u.fs_d.value;});
  read(P_STRENGTH,[&](PF_ParamDef& p){state->ascii.asciiStrength=(float)p.u.fs_d.value;});
  read(P_USE_CLIP_SCALE,[&](PF_ParamDef& p){state->ascii.useClipScale=p.u.bd.value!=0;});
  read(P_CLIP_SCALE,[&](PF_ParamDef& p){state->ascii.glyphScale=(float)p.u.fs_d.value/100.0f;});
