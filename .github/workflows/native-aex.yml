@@ -12,6 +12,7 @@ on:
    - 'core/**'
    - 'tests/**'
    - 'ae/**'
+   - 'XAO/fonts/**'
    - '.github/workflows/**'
 permissions:
  contents: write
