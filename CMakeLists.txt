@@ -28,20 +28,15 @@ if(XAO_BUILD_AE_PLUGIN)
  if(NOT ${XAO_AE_SDK_ROOT OR NOT EXISTS "${XAO_AE_SDK_ROOT}/Headers/AE_Effect.h")
   message(FATAL_ERROR "XAO_AE_SDK_ROOT must point to Adobe SDK root.")
  endif()
+ find_package(Python3 REQUIRED COMPONENTS Interpreter)
  add_library(AESDK INTERFACE)
  target_include_directories(AESDK INTERFACE "${XAO_AE_SDK_ROOT}/Headers" "${XAO_AE_SDK_ROOT}/Headers/SP" "${XAO_AE_SDK_ROOT}/Util")
- find_program(XAO_CL cl REQUIRED)
- find_program(XAO_PIPLTOOL PiPLtool.exe PATHS "${XAO_AE_SDK_ROOT}/Resources" "${XAO_AE_SDK_ROOT}/Examples/Resources" REQUIRED)
- set(R "${CMAKE_CURRENT_SOURCE_DIR}/ae/XAOAsciiPiPL.r")
- set(RR "${CMAKE_CURRENT_BINARY_DIR}/XAOAsciiPiPL.rr")
- set(RRC "${CMAKE_CURRENT_BINARY_DIR}/XAOAsciiPiPL.rrc")
- set(RC "${CMAKE_CURRENT_BINARY_DIR}/XAOAsciiPiPL.rc")
- add_custom_command(OUTPUT "${RC}"
-  COMMAND cmd /c "\"${XAO_CL}\" /I \"${XAO_AE_SDK_ROOT}/Headers\" /EP \"${R}\" > \"${RR}\""
-  COMMAND "${XAO_PIPLTOOL}" "${RR}" "${RRC}"
-  COMMAND cmd /c "\"${XAO_CL}\" /D MSWindows /EP \"${RRC}\" > \"${RC}\""
-  DEPENDS "${R}" VERBATIM)
- add_library(XAO_ASCII SHARED ae/XAOAscii.cpp "${RC}")
+ set(PIPL_RC "${CMAKE_CURRENT_BINARY_DIR}/XAOAsciiPiPL.rc")
+ set(PIPL_BIN "${CMAKE_CURRENT_BINARY_DIR}/XAOAsciiPiPL.bin")
+ add_custom_command(OUTPUT "${PIPL_RC}" "${PIPL_BIN}"
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ae/generate_pipl.py" "${PIPL_RC}" "${PIPL_BIN}"
+  DEPENDS ae/generate_pipl.py VERBATIM COMMENT "Generating XAO PiPL resource")
+ add_library(XAO_ASCII SHARED ae/XAOAscii.cpp "${PIPL_RC}")
  target_link_libraries(XAO_ASCII PRIVATE xao_core AESDK)
  target_compile_features(XAO_ASCII PRIVATE cxx_std_17)
  target_compile_definitions(XAO_ASCII PRIVATE MSWindows _WINDOWS WIN32 _WIN32 _WIN64 AE_OS_WIN _CRT_SECURE_NO_WARNINGS)
