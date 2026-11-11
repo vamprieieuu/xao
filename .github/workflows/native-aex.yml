@@ -1,0 +1,46 @@
+name: XAO Native AE Build
+on:
+ push:
+  branches: [xao/recovery-baseline-2026-11-10]
+ pull_request:
+  branches: [xao/recovery-baseline-2026-11-10]
+ workflow_dispatch:
+jobs:
+ native-aex:
+  runs-on: windows-2022
+  steps:
+   - uses: actions/checkout@v4
+     name: Checkout XAO
+   - uses: actions/checkout@v4
+     name: Checkout MAJEED SDK/build reference
+     with:
+      repository: vamprieieuu/Dithering_MAJEED_build_ready
+      ref: main
+      path: reference/majeed
+   - uses: ilammy/msvc-dev-cmd@v1
+     with:
+      arch: x64
+   - name: Configure
+     shell: pwsh
+     run: |
+      $sdk = Join-Path $env:GITHUB_WORKSPACE "reference/majeed/extern/AfterEffectsSDK"
+      if (-not (Test-Path (Join-Path $sdk "Headers/AE_Effect.h"))) { throw "Adobe SDK headers missing from MAJEED reference checkout." }
+      cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DXAO_BUILD_TESTS=ON -DXAO_BUILD_AE_PLUGIN=ON "-DXAO_AE_SDK_ROOT=$sdk"
+   - name: Build AEX and core
+     run: cmake --build build --config Release --parallel
+   - name: Test core
+     run: ctest --test-dir build -C Release --output-on-failure
+   - name: Verify AEX
+     shell: pwsh
+     run: |
+      $aex = Get-ChildItem build -Filter "XAO_ASCII.aex" -Recurse -File | Select-Object -First 1
+      if (-not $aex) { throw "XAO_ASCII.aex was not produced." }
+      $hash = (Get-FileHash $aex.FullName -Algorithm SHA256).Hash
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("AEX {0}; Bytes {1}; SHA256 {2}" -f $aex.FullName,$aex.Length,$hash)
+      dumpbin /headers /exports /dependents $aex.FullName
+   - uses: actions/upload-artifact@v4
+     name: Upload XAO AEX
+     with:
+      name: XAO_ASCII_AE2023_Windows_x64
+      path: build/bin/Release/XAO_ASCII.aex
+      if-no-files-found: error
