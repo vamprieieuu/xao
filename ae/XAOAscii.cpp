@@ -12,6 +12,9 @@
 #include <cmath>
 #include <cstddef>
 #include <new>
+#ifndef PF_OutFlag2_SUPPORTS_THREADED_RENDERING
+#define PF_OutFlag2_SUPPORTS_THREADED_RENDERING (1L << 27)
+#endif
 namespace {
 enum { P_INPUT=0,P_CELL,P_SCALE,P_CONTRAST,P_BRIGHTNESS,P_INVERT,P_COLORIZE,P_TRANSFER,P_COUNT };
 enum { T_LINEAR=1,T_REC709=2,T_SRGB=3 };
@@ -33,7 +36,7 @@ template<class PX>PF_Err Render(const PF_EffectWorld* s,PF_EffectWorld* d,const 
  return PF_Err_NONE;
 }
 PF_Err Global(PF_OutData* o){o->my_version=PF_VERSION(1,0,0,PF_Stage_DEVELOP,1);o->out_flags=PF_OutFlag_PIX_INDEPENDENT|PF_OutFlag_DEEP_COLOR_AWARE;o->out_flags2=PF_OutFlag2_FLOAT_COLOR_AWARE|PF_OutFlag2_SUPPORTS_SMART_RENDER|PF_OutFlag2_SUPPORTS_THREADED_RENDERING;return PF_Err_NONE;}
-PF_Err Params(PF_InData* in,PF_OutData* out){PF_ParamDef d;AEFX_CLR_STRUCT(d);
+PF_Err Params(PF_InData* in_data,PF_OutData* out){PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_FLOAT_SLIDERX("Cell size",2,128,2,64,8,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("Glyph scale",.1,1.5,.1,1,.88,PF_Precision_TENTHS,0,0,P_SCALE);
  PF_ADD_FLOAT_SLIDERX("Contrast",0,3,0,2,1,PF_Precision_TENTHS,0,0,P_CONTRAST);
