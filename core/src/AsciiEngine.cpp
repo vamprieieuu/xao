@@ -123,7 +123,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  int w=src.width(),h=src.height(),cell=std::max(2,std::min(256,params_.cellSize));
  if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
  float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);
- float glyphScale=clampf(params_.glyphScale*(params_.characterSize/88.0f),.1f,1.5f);
+ float glyphScale=clampf(params_.glyphScale*(params_.characterSize/100.0f),.05f,3.0f);
  if(params_.visualStyle==AsciiVisualStyle::Micro)glyphScale*=0.68f;
  if(params_.visualStyle==AsciiVisualStyle::Photorealistic)glyphScale*=0.92f;
  float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
@@ -133,8 +133,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.enableAncient||params_.enableEnglish||params_.enableArabic;
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
  for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!groups&&!set.empty()&&!g.wordToken&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
- if(candidates.empty()&&!params_.randomWords)for(const auto& g:builtinAsciiGlyphAtlas()->glyphs)candidates.push_back(&g);
- if(candidates.empty())return;
+ if(candidates.empty()){dst=src;return;}
  for(int y0=0,rowIndex=0;y0<h;++rowIndex){
   int rowHeight=cell;
   if(params_.visualStyle==AsciiVisualStyle::Organic){const std::uint32_t organic=hash32(params_.randomSeed^(std::uint32_t)rowIndex*0xA511E9B3u);rowHeight=std::max(2,(int)std::lround(cell*(0.82f+0.36f*(float)organic/(float)0xFFFFFFFFu)));}
@@ -277,13 +276,13 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  }
  if(params_.visualStyle==AsciiVisualStyle::Threshold){
   for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)={0,0,0,0};
-  const int rowStep=std::clamp(params_.thresholdRowSpacing,2,64),segment=std::clamp(params_.thresholdSegmentWidth,4,128);
-  const int barHeight=std::max(1,rowStep/3);const float threshold=clamp01(params_.thresholdLevel);
+  const int rowStep=std::clamp(params_.thresholdRowSpacing,2,64),segment=std::clamp(params_.thresholdSegmentWidth,4,512);
+  const int barHeight=std::max(1,rowStep/3);const float threshold=clamp01(params_.thresholdLevel*0.55f);
   for(int y=0;y<h;y+=rowStep)for(int x=0;x<w;x+=segment){
    const int xEnd=std::min(w,x+segment);float lum=0.0f;Pixel color{0,0,0,0};int count=0;
    for(int sy=y;sy<std::min(h,y+rowStep);++sy)for(int sx=x;sx<xEnd;++sx){const Pixel& q=src.at(sx,sy);lum+=sampleChannel(q,AsciiChannelMode::Luma);color.r+=q.r;color.g+=q.g;color.b+=q.b;color.a+=q.a;++count;}
    if(!count)continue;const float l=lum/(float)count;if(l<threshold)continue;
-   const int length=std::max(1,(int)std::lround((float)(xEnd-x)*clamp01((l-threshold)/std::max(0.001f,1.0f-threshold))));
+   const int length=std::max(1,(int)std::lround((float)(xEnd-x)*clamp01((l-threshold*0.35f)/std::max(0.001f,1.0f-threshold*0.35f))));
    const float inv=1.0f/(float)count;color.r*=inv;color.g*=inv;color.b*=inv;color.a*=inv;
    for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=x;xx<std::min(x+length,w);++xx)dst.at(xx,yy)=color;
   }
