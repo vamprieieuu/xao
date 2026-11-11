@@ -41,6 +41,8 @@ jobs:
       Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("AEX {0}; Bytes {1}; SHA256 {2}" -f $aex.FullName,$aex.Length,$hash)
       $exports = dumpbin /exports $aex.FullName | Out-String
       if ($exports -notmatch "EffectMain" -or $exports -notmatch "PluginDataEntryFunction2") { throw "Required AE exports are missing." }
+      python ae/verify_aex.py $aex.FullName build/XAOAsciiPiPL.bin
+      if ($LASTEXITCODE -ne 0) { throw "Strict AEX verification failed." }
       dumpbin /headers /exports /dependents $aex.FullName
    - uses: actions/upload-artifact@v4
      name: Upload XAO AEX
