@@ -1,4 +1,5 @@
 #include "xao/AsciiEngine.h"
+#include "xao/AsciiRampLibrary.h"
 #include "../../XAO/ascii [ main ]/ascii ofx [open source]/font8x8_basic.h"
 #include <algorithm>
 #include <array>
