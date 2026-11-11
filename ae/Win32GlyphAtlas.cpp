@@ -130,6 +130,8 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
 std::shared_ptr<const GlyphAtlas> buildGlyphAtlas(const AsciiParams& params,const std::wstring& fontFamily){
  static std::mutex mutex;static std::unordered_map<std::wstring,std::shared_ptr<const GlyphAtlas>> cache;
  const auto key=makeKey(params,fontFamily);std::lock_guard<std::mutex> lock(mutex);auto it=cache.find(key);if(it!=cache.end())return it->second;
- auto result=build(params,fontFamily);cache.emplace(key,result);return result;
+ auto result=build(params,fontFamily);
+ if(cache.size()>=32)cache.erase(cache.begin());
+ cache.emplace(key,result);return result;
 }
 } // namespace xao::win32
