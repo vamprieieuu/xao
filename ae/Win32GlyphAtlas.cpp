@@ -45,7 +45,7 @@ std::wstring makeKey(const AsciiParams& p,const std::wstring& family){
  for(bool f:flags)k+=f?L"1":L"0";return k;
 }
 std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring& family){
- std::vector<Token> tokens;std::set<std::wstring> seen;std::set<std::wstring> groupSeen;
+ std::vector<Token> tokens;std::set<std::wstring> seen;
  const bool s1Latin=p.characterSet==AsciiCharacterSetId::S1Classic||p.characterSet==AsciiCharacterSetId::S1Minimal||p.characterSet==AsciiCharacterSetId::S1Detailed||p.characterSet==AsciiCharacterSetId::S1Bourke;
  addText(tokens,seen,asciiCharacterSetCodepoints(p.characterSet),s1Latin);
  switch(p.characterSet){
@@ -62,9 +62,9 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
  const std::u32string ancientNumbers=U"ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫ";
  const std::u32string englishNumbers=U"0123456789";
  const std::u32string arabicNumbers=U"٠١٢٣٤٥٦٧٨٩";
- if(p.enableAncient){if(p.ancientLetters)for(char32_t cp:ancientLetters)addCodepoint(tokens,groupSeen,cp);if(p.ancientNumbers)for(char32_t cp:ancientNumbers)addCodepoint(tokens,seen,cp);if(p.ancientWords)addWords(tokens,ancientLetters,p.randomSeed^0xA11CEu,false);}
+ if(p.enableAncient){if(p.ancientLetters)for(char32_t cp:ancientLetters)addCodepoint(tokens,seen,cp);if(p.ancientNumbers)for(char32_t cp:ancientNumbers)addCodepoint(tokens,seen,cp);if(p.ancientWords)addWords(tokens,ancientLetters,p.randomSeed^0xA11CEu,false);}
  if(p.enableEnglish){if(p.englishLetters)for(char32_t cp:englishLetters)addCodepoint(tokens,seen,cp);if(p.englishNumbers)for(char32_t cp:englishNumbers)addCodepoint(tokens,seen,cp);if(p.englishWords)addWords(tokens,englishLetters,p.randomSeed^0xE61A5u,false);}
- if(p.enableArabic){if(p.arabicLetters)for(char32_t cp:arabicLetters)addCodepoint(tokens,groupSeen,cp,true);if(p.arabicNumbers)for(char32_t cp:arabicNumbers)addCodepoint(tokens,seen,cp,true);if(p.arabicWords)addWords(tokens,arabicLetters,p.randomSeed^0xA2AB1Cu,true);}
+ if(p.enableArabic){if(p.arabicLetters)for(char32_t cp:arabicLetters)addCodepoint(tokens,seen,cp,true);if(p.arabicNumbers)for(char32_t cp:arabicNumbers)addCodepoint(tokens,seen,cp,true);if(p.arabicWords)addWords(tokens,arabicLetters,p.randomSeed^0xA2AB1Cu,true);}
  if(p.randomWords&&std::none_of(tokens.begin(),tokens.end(),[](const Token& t){return t.word;})){
   std::u32string pool;for(char32_t cp:asciiCharacterSetCodepoints(p.characterSet))if(!isNumber(cp))pool.push_back(cp);
   if(pool.empty())pool=englishLetters;addWords(tokens,pool,p.randomSeed^0x574F5244u,false);
