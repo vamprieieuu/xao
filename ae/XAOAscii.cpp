@@ -150,7 +150,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_SMOOTH_SHADING,[&](PF_ParamDef& p){state->ascii.smoothShading=(float)p.u.fs_d.value;});
  read(P_BLEND_ORIGINAL,[&](PF_ParamDef& p){state->ascii.blendWithOriginal=(float)p.u.fs_d.value;});
  read(P_RANDOM_COLOR_AMOUNT,[&](PF_ParamDef& p){state->ascii.randomColorAmount=(float)p.u.fs_d.value;});
- read(P_X_FLIP_THRESHOLD,[&](PF_ParamDef& p){state->ascii.xFlipThreshold=(float)p.u.fs_d.value;});
+ read(P_X_FLIP_THRESHOLD,[&](PF_ParamDef& p){state->ascii.xFlipThreshold=std::clamp((float)p.u.fs_d.value/100.0f,0.0f,1.0f);});
  read(P_PRESERVE_ALPHA,[&](PF_ParamDef& p){state->ascii.preserveCellAlpha=p.u.bd.value!=0;});
  read(P_TRANSFER,[&](PF_ParamDef& p){state->transfer=p.u.pd.value;});
  read(P_REVERSE_ORDER,[&](PF_ParamDef& p){state->ascii.reverseOrder=p.u.bd.value!=0;});
