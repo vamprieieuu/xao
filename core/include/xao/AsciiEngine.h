@@ -14,6 +14,7 @@ enum class AsciiCharacterSetId : std::uint8_t {
  S1Classic, S1Minimal, S1Detailed, S1Bourke, S1Braille, S1Katakana, S1Blocks, S1Quadrants, S1BoxDrawing, AsciiArtMainStandard, AsciiArtMainSimple, AsciiArtMainDetailed, Count
 };
 enum class AsciiMappingMode : std::uint8_t { Auto=0, ShapeMatch, LuminanceRamp, EdgeDirectional };
+enum class AsciiChannelMode : std::uint8_t { Luma=0, Red, Green, Blue };
 struct GlyphBitmap {
  char32_t codepoint=U' ';
  bool wordToken=false;
@@ -48,6 +49,7 @@ struct AsciiParams {
  float gamma=2.2f;
  float edgeThreshold=0.15f;
  AsciiMappingMode mappingMode=AsciiMappingMode::Auto;
+ AsciiChannelMode channelMode=AsciiChannelMode::Luma;
  float randomTimingVariation=1.0f;
  std::uint32_t randomSeed=0;
  AsciiPresetId preset=AsciiPresetId::Default;
