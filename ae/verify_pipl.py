@@ -16,7 +16,7 @@ EXPECTED = {
     b"4668": b"EffectMain\0\0",
     b"RVPe": struct.pack("<I", 2),
     b"RVSe": struct.pack("<HH", 13, 28),
-    b"REVe": struct.pack("<I", 0x00080001),
+    b"REVe": struct.pack("<I", 0x00088001),
     b"OLGe": struct.pack("<I", 0x02000000),
     b"2LGe": struct.pack("<I", 0x08001400),
     b"ANMe": pstr(b"XAO"),
