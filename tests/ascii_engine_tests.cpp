@@ -32,6 +32,12 @@ int main(){
  xao::AsciiParams blueMode=redMode;blueMode.channelMode=xao::AsciiChannelMode::Blue;
  xao::AsciiEngine redEngine(redMode),blueEngine(blueMode);redEngine.render(channelSource,redMapped,{});blueEngine.render(channelSource,blueMapped,{});
  bool channelDiff=false;for(std::size_t i=0;i<redMapped.pixels().size();++i)channelDiff|=!near(redMapped.pixels()[i].a,blueMapped.pixels()[i].a);if(!channelDiff)return fail("RGB channel mode changes glyph mapping");
+ // Edge-directional mode resolves a horizontal luminance gradient to a horizontal glyph.
+ xao::AsciiParams edgeMode;edgeMode.colorize=false;edgeMode.mappingMode=xao::AsciiMappingMode::EdgeDirectional;edgeMode.atlas=std::make_shared<xao::GlyphAtlas>();
+ xao::GlyphBitmap horizontal;horizontal.codepoint=U'-';horizontal.width=8;horizontal.height=8;horizontal.coverage.assign(64,0);for(int x=0;x<8;++x)horizontal.coverage[3*8+x]=255;horizontal.density=0.125f;edgeMode.atlas->glyphs.push_back(horizontal);
+ xao::Image edgeSource(8,8),edgeOutput(8,8);for(int y=0;y<8;++y)for(int x=0;x<8;++x){float v=(float)x/7.0f;edgeSource.at(x,y)={v,v,v,1};}
+ xao::AsciiEngine edgeEngine(edgeMode);edgeEngine.render(edgeSource,edgeOutput,{});
+ int horizontalInk=0;for(int x=0;x<8;++x)if(edgeOutput.at(x,3).a>0.5f)++horizontalInk;if(horizontalInk<3)return fail("edge-directional horizontal glyph selection");
  xao::AsciiParams preset;xao::applyCratesPreset(preset,xao::AsciiPresetId::Matrix);if(preset.characterSet!=xao::AsciiCharacterSetId::CratesBinary||!preset.randomCharacters)return fail("preset application");
  xao::AsciiParams rp=p;rp.randomCharacters=true;rp.randomAmount=0.8f;rp.randomTiming=true;rp.randomSpeed=1.0f;xao::AsciiEngine re(rp);xao::Image r0(32,16),r1(32,16),r2(32,16);xao::RenderContext c0;c0.timeSeconds=0; xao::RenderContext c1;c1.timeSeconds=0;xao::RenderContext c2;c2.timeSeconds=1;re.render(src,r0,c0);re.render(src,r1,c1);re.render(src,r2,c2);bool stable=true,animated=false;for(std::size_t i=0;i<r0.pixels().size();++i){stable&=near(r0.pixels()[i].r,r1.pixels()[i].r)&&near(r0.pixels()[i].a,r1.pixels()[i].a);animated|=!near(r0.pixels()[i].r,r2.pixels()[i].r)||!near(r0.pixels()[i].a,r2.pixels()[i].a);}if(!stable)return fail("random deterministic at same time");if(!animated)return fail("random timing advances");
  std::cout<<"XAO ASCII engine tests passed\n";return 0;
