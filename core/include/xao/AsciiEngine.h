@@ -60,7 +60,7 @@ struct AsciiParams {
  float randomSpeed=1.0f;
  float gamma=2.2f;
  float edgeThreshold=0.15f;
- AsciiMappingMode mappingMode=AsciiMappingMode::Auto;
+ AsciiMappingMode mappingMode=AsciiMappingMode::ShapeMatch;
  AsciiChannelMode channelMode=AsciiChannelMode::Luma;
  float randomTimingVariation=1.0f;
  std::uint32_t randomSeed=0;
