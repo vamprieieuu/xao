@@ -103,7 +103,6 @@ std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas(){static const auto a=makeBuiltin();return a;}
 void applyCratesPreset(AsciiParams& p,AsciiPresetId id) noexcept{
  const auto& v=cratesPreset(id);p.preset=id;p.characterSize=v.characterSize;p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=v.randomShuffle>0;p.randomTiming=v.randomSpeed>0;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);
- p.enableAncient=p.enableEnglish=p.enableArabic=false;
 }
 void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) const{
  if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
@@ -117,7 +116,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  float charMargin=params_.useCharacterMargin?clampf(params_.characterMargin/200.0f,0,.45f):0.0f,cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
 
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
- auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.enableAncient||params_.enableEnglish||params_.enableArabic;
+ auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.ancientLetters||params_.ancientNumbers||params_.ancientWords||params_.englishLetters||params_.englishNumbers||params_.englishWords||params_.arabicLetters||params_.arabicNumbers||params_.arabicWords;
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
  for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!groups&&!set.empty()&&!g.wordToken&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
  if(candidates.empty()){dst=src;return;}
@@ -190,7 +189,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   float top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
   if(glyph->wordToken&&drawX1>x1){Pixel wa{0,0,0,0};int wn=0;for(int yy=y0;yy<y1;++yy)for(int xx=x0;xx<drawX1;++xx){const Pixel& q=src.row(yy)[xx];wa.r+=q.r;wa.g+=q.g;wa.b+=q.b;wa.a+=q.a;++wn;}if(wn){float wi=1.0f/(float)wn;avg={wa.r*wi,wa.g*wi,wa.b*wi,wa.a*wi};}}
   if(params_.visualStyle==AsciiVisualStyle::Photorealistic){const Pixel& center=src.at((x0+x1)/2,(y0+y1)/2);const float m=0.16f;avg.r=avg.r*(1-m)+center.r*m;avg.g=avg.g*(1-m)+center.g*m;avg.b=avg.b*(1-m)+center.b*m;}
-  Pixel fg=(params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
+  Pixel fg=(params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)?avg:params_.ink;if((params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   if(params_.visualStyle==AsciiVisualStyle::Glitch){const float glitch=(float)((rv>>16)&255u)/255.0f;const float flicker=0.72f+0.28f*std::fabs(std::sin((float)time*18.0f+glitch*6.28318f));fg.r=clamp01(fg.r*(0.65f+glitch*0.9f));fg.g=clamp01(fg.g*(0.7f+(1.0f-glitch)*0.7f));fg.b=clamp01(fg.b*(0.75f+glitch*0.8f));fg=scaled(fg,flicker);}
   if(params_.visualStyle==AsciiVisualStyle::CGO){const float accent=(float)(rv&255u)/255.0f;if(accent>0.78f){fg.r=std::max(fg.r,0.78f);fg.g=std::max(fg.g,0.16f+0.22f*accent);fg.b*=0.35f;}}
