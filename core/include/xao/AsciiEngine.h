@@ -94,6 +94,16 @@ struct AsciiParams {
  float glowCenterY=0.5f;
  float glowRegionSize=0.25f;
  Pixel glowColor{1.0f,0.22f,0.035f,1.0f};
+ bool raysEnabled=false;
+ float raysCount=18.0f;
+ float raysAngle=0.0f;
+ float raysSpread=360.0f;
+ float raysLength=1.0f;
+ float raysIntensity=1.0f;
+ float raysSharpness=6.0f;
+ float raysOriginX=0.5f;
+ float raysOriginY=0.5f;
+ Pixel raysColor{1.0f,0.42f,0.12f,1.0f};
  Pixel tintColor{1,1,1,1};
  Pixel ink{1,1,1,1};
  Pixel paper{0,0,0,0};
