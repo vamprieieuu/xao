@@ -64,8 +64,19 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  const float ancientScale=p.useAncientSize?std::clamp(p.ancientSize/100.0f,.1f,3.0f):1.0f;
  const float englishScale=p.useEnglishSize?std::clamp(p.englishSize/100.0f,.1f,3.0f):1.0f;
  const float arabicScale=p.useArabicSize?std::clamp(p.arabicSize/100.0f,.1f,3.0f):1.0f;
- for(int id=0;id<=18;++id){const int font=(id==13||id==3)?ancientFont:0;addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),font);}
- for(int id=24;id<=26;++id)addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),0);
+ int presetFont=0;
+ switch(p.preset){
+  case AsciiPresetId::AlienSignal:case AsciiPresetId::Corrupted:case AsciiPresetId::Diamonds:case AsciiPresetId::Motherboard:presetFont=ancientFont;break;
+  case AsciiPresetId::Classic:case AsciiPresetId::Crossword:case AsciiPresetId::Matrix:case AsciiPresetId::PinkShapes:presetFont=englishFont;break;
+  default:break;
+ }
+ switch(p.visualStyle){
+  case AsciiVisualStyle::CGO:case AsciiVisualStyle::Liquid:case AsciiVisualStyle::Glitch:presetFont=ancientFont;break;
+  case AsciiVisualStyle::Ghost:case AsciiVisualStyle::Mosaic:case AsciiVisualStyle::Rainbow:case AsciiVisualStyle::Geometric:presetFont=englishFont;break;
+  default:break;
+ }
+ for(int id=0;id<=18;++id){const int font=(id==13||id==3)?ancientFont:presetFont;addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),font);}
+ for(int id=24;id<=26;++id)addText(tokens,seen,asciiCharacterSetCodepoints((AsciiCharacterSetId)id),presetFont);
  switch(p.characterSet){case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF,0);break;case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6,0);break;case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F,0);break;case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F,0);break;case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F,0);break;default:break;}
  const std::u32string ancient=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψωᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
  const std::u32string english=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
