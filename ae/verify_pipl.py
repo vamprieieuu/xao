@@ -11,7 +11,7 @@ def pstr(value: bytes) -> bytes:
 
 EXPECTED = {
     b"dnik": b"TKFe",
-    b"eman": pstr(b"XAO ASCII"),
+    b"eman": pstr(b"XAO"),
     b"gtac": pstr(b"Stylize"),
     b"4668": b"EffectMain\0\0",
     b"RVPe": struct.pack("<I", 2),
@@ -19,7 +19,7 @@ EXPECTED = {
     b"REVe": struct.pack("<I", 0x00080001),
     b"OLGe": struct.pack("<I", 0x02000000),
     b"2LGe": struct.pack("<I", 0x08001400),
-    b"ANMe": pstr(b"XAO_ASCII"),
+    b"ANMe": pstr(b"XAO"),
     b"LFea": struct.pack("<I", 0),
 }
 def parse(data: bytes) -> dict[bytes, bytes]:

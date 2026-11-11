@@ -13,7 +13,7 @@ def pascal(text: str) -> bytes:
 def make_resource() -> bytes:
     properties = [
         (b"dnik", b"TKFe"),
-        (b"eman", pascal("XAO ASCII")),
+        (b"eman", pascal("XAO")),
         (b"gtac", pascal("Stylize")),
         (b"4668", b"EffectMain\0\0"),
         (b"RVPe", struct.pack("<I", 2)),
@@ -22,7 +22,7 @@ def make_resource() -> bytes:
         (b"FNIe", b"\0\0"),
         (b"OLGe", struct.pack("<I", 0x02000000)),
         (b"2LGe", struct.pack("<I", 0x08001400)),
-        (b"ANMe", pascal("XAO_ASCII")),
+        (b"ANMe", pascal("XAO")),
         (b"LFea", struct.pack("<I", 0)),
         (b"LRUe", pascal("https://github.com/vamprieieuu/xao")),
     ]
