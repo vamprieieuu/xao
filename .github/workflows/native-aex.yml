@@ -1,4 +1,7 @@
 name: XAO Native AE Build
+concurrency:
+ group: xao-native-aex-${{ github.ref }}
+ cancel-in-progress: true
 on:
  workflow_dispatch:
  push:
@@ -8,6 +11,7 @@ on:
    - 'CMakeLists.txt'
    - 'core/**'
    - 'ae/**'
+   - '.github/workflows/**'
 permissions:
  contents: write
 jobs:
