@@ -52,6 +52,12 @@ int main(){
  xao::AsciiEngine rayEngine(rayParams);rayEngine.render(raySource,rayA,{});rayEngine.render(raySource,rayB,{});
  bool raysVisible=false;for(std::size_t i=0;i<rayA.pixels().size();++i){raysVisible|=rayA.pixels()[i].r>0.01f;if(!near(rayA.pixels()[i].r,rayB.pixels()[i].r))return fail("radial rays deterministic");}
  if(!raysVisible)return fail("radial ray pass renders visible beams");
+ // Liquid layout uses deterministic variable-width and variable-height panels.
+ xao::AsciiParams liquidParams;liquidParams.colorize=false;liquidParams.layoutMode=xao::AsciiLayoutMode::LiquidPanels;liquidParams.cellSize=4;liquidParams.panelMinWidth=1;liquidParams.panelMaxWidth=3;liquidParams.panelMinHeight=1;liquidParams.panelMaxHeight=3;liquidParams.randomSeed=1234;liquidParams.randomCharacters=true;
+ xao::Image liquidSource(32,24),liquidA(32,24),liquidB(32,24);for(int y=0;y<24;++y)for(int x=0;x<32;++x){float v=(float)(x+y)/55.0f;liquidSource.at(x,y)={v,v,v,1};}
+ xao::AsciiEngine liquidEngine(liquidParams);liquidEngine.render(liquidSource,liquidA,{});liquidEngine.render(liquidSource,liquidB,{});
+ bool liquidVisible=false;for(std::size_t i=0;i<liquidA.pixels().size();++i){liquidVisible|=liquidA.pixels()[i].a>0.1f;if(!near(liquidA.pixels()[i].r,liquidB.pixels()[i].r)||!near(liquidA.pixels()[i].a,liquidB.pixels()[i].a))return fail("liquid panels deterministic");}
+ if(!liquidVisible)return fail("liquid panel layout renders output");
  xao::AsciiParams preset;xao::applyCratesPreset(preset,xao::AsciiPresetId::Matrix);if(preset.characterSet!=xao::AsciiCharacterSetId::CratesBinary||!preset.randomCharacters)return fail("preset application");
  xao::AsciiParams rp=p;rp.randomCharacters=true;rp.randomAmount=0.8f;rp.randomTiming=true;rp.randomSpeed=1.0f;xao::AsciiEngine re(rp);xao::Image r0(32,16),r1(32,16),r2(32,16);xao::RenderContext c0;c0.timeSeconds=0; xao::RenderContext c1;c1.timeSeconds=0;xao::RenderContext c2;c2.timeSeconds=1;re.render(src,r0,c0);re.render(src,r1,c1);re.render(src,r2,c2);bool stable=true,animated=false;for(std::size_t i=0;i<r0.pixels().size();++i){stable&=near(r0.pixels()[i].r,r1.pixels()[i].r)&&near(r0.pixels()[i].a,r1.pixels()[i].a);animated|=!near(r0.pixels()[i].r,r2.pixels()[i].r)||!near(r0.pixels()[i].a,r2.pixels()[i].a);}if(!stable)return fail("random deterministic at same time");if(!animated)return fail("random timing advances");
  std::cout<<"XAO ASCII engine tests passed\n";return 0;
