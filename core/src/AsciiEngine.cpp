@@ -68,23 +68,17 @@ std::shared_ptr<const GlyphAtlas> makeBuiltin(){
 }
 const GlyphBitmap* selectGlyph(const std::vector<const GlyphBitmap*>& candidates,const std::array<float,64>& target,bool shape,float amount,std::uint32_t random) noexcept{
  if(candidates.empty())return nullptr;
- struct Score{const GlyphBitmap* glyph=nullptr;float value=0;};
- std::array<Score,32> densityBest{};std::size_t densityCount=0;float mean=0;for(float v:target)mean+=v;mean/=64;
- for(const auto* g:candidates){float d=std::fabs(mean-g->density);
-  if(densityCount==densityBest.size()&&d>=densityBest.back().value)continue;
-  std::size_t pos=std::min(densityCount,densityBest.size()-1);
-  while(pos>0&&densityBest[pos-1].value>d){densityBest[pos]=densityBest[pos-1];--pos;}
-  densityBest[pos]={g,d};if(densityCount<densityBest.size())++densityCount;
- }
- std::array<Score,32> shapeBest{};std::size_t shapeCount=0;
- const std::size_t shortlist=std::min<std::size_t>(densityCount,shape?16:32);
- for(std::size_t i=0;i<shortlist;++i){const auto* g=densityBest[i].glyph;float score=0;
-  if(shape){for(int y=0;y<8;++y)for(int x=0;x<8;++x){float m=maskAt(*g,(x+.5f)/8.0f,(y+.5f)/8.0f,false);float q=target[(std::size_t)y*8+x]-m;score+=q*q;}}
-  else score=densityBest[i].value;
-  std::size_t pos=shapeCount;while(pos>0&&shapeBest[pos-1].value>score){shapeBest[pos]=shapeBest[pos-1];--pos;}shapeBest[pos]={g,score};++shapeCount;
- }
- const std::size_t pool=std::min(shapeCount,(std::size_t)(1+std::lround(clamp01(amount)*15.0f)));
- return shapeBest[(std::size_t)random%pool].glyph;
+ float mean=0.0f;for(float v:target)mean+=v;mean/=64.0f;
+ auto it=std::lower_bound(candidates.begin(),candidates.end(),mean,[](const GlyphBitmap* g,float value){return g->density<value;});
+ std::size_t center=it==candidates.end()?candidates.size()-1:(std::size_t)(it-candidates.begin());
+ if(center>0&&std::fabs(candidates[center-1]->density-mean)<std::fabs(candidates[center]->density-mean))--center;
+ const std::size_t pool=std::min(candidates.size(),(std::size_t)(1+std::lround(clamp01(amount)*15.0f)));
+ if(!shape){std::size_t start=center>pool/2?center-pool/2:0;if(start+pool>candidates.size())start=candidates.size()-pool;return candidates[start+(std::size_t)random%pool];}
+ struct Score{const GlyphBitmap* glyph=nullptr;float value=0.0f;};
+ std::array<Score,16> best{};std::size_t count=0;const std::size_t shortlist=std::min<std::size_t>(candidates.size(),best.size());
+ std::size_t start=center>shortlist/2?center-shortlist/2:0;if(start+shortlist>candidates.size())start=candidates.size()-shortlist;
+ for(std::size_t i=0;i<shortlist;++i){const auto* g=candidates[start+i];float score=0.0f;for(int y=0;y<8;++y)for(int x=0;x<8;++x){float m=maskAt(*g,(x+.5f)/8.0f,(y+.5f)/8.0f,false);float q=target[(std::size_t)y*8+x]-m;score+=q*q;}std::size_t pos=count;while(pos>0&&best[pos-1].value>score){best[pos]=best[pos-1];--pos;}best[pos]={g,score};++count;}
+ const std::size_t choose=std::min(count,pool);return best[(std::size_t)random%choose].glyph;
 }
 Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
 
@@ -123,6 +117,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  int rampLimit=0;if(params_.characterSet==AsciiCharacterSetId::S1Classic)rampLimit=10;else if(params_.characterSet==AsciiCharacterSetId::S1Minimal)rampLimit=6;else if(params_.characterSet==AsciiCharacterSetId::S1Bourke)rampLimit=28;
  if(rampLimit>0){std::vector<const GlyphBitmap*> base;for(auto* g:candidates)if(!g->familyToken&&!g->wordToken)base.push_back(g);std::sort(base.begin(),base.end(),[](const GlyphBitmap* a,const GlyphBitmap* b){return a->density<b->density;});if((int)base.size()>rampLimit){base.resize((std::size_t)rampLimit);candidates.erase(std::remove_if(candidates.begin(),candidates.end(),[&](const GlyphBitmap* g){return !g->familyToken&&!g->wordToken&&std::find(base.begin(),base.end(),g)==base.end();}),candidates.end());}}
  if(candidates.empty()){dst=src;return;}
+ std::sort(candidates.begin(),candidates.end(),[](const GlyphBitmap* a,const GlyphBitmap* b){return a->density<b->density;});
  for(int y0=0,rowIndex=0;y0<h;++rowIndex){
   int rowHeight=cell;
   if(params_.visualStyle==AsciiVisualStyle::Organic){const std::uint32_t organic=hash32(params_.randomSeed^(std::uint32_t)rowIndex*0xA511E9B3u);rowHeight=std::max(2,(int)std::lround(cell*(0.82f+0.36f*(float)organic/(float)0xFFFFFFFFu)));}
@@ -255,7 +250,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   for(int y=0,row=0;y<h;y+=rowStep,++row)for(int x=0,col=0;x<w;x+=segment,++col){
    const int xEnd=std::min(w,x+segment);float lum=0.0f;float alphaSum=0.0f;int count=0;
    for(int sy=y;sy<std::min(h,y+rowStep);++sy)for(int sx=x;sx<xEnd;++sx){const Pixel& q=src.at(sx,sy);lum+=sampleChannel(q,params_.channelMode);alphaSum+=q.a;++count;}
-   if(!count)continue;const float l=clamp01(lum/(float)count);const int length=std::max(1,(int)std::lround((float)(xEnd-x)*(0.16f+0.84f*l)));
+   if(!count)continue;float l=clamp01(lum/(float)count);l=std::pow(l,1.0f/std::clamp(params_.gamma,0.1f,4.0f));l=clamp01((l-0.5f)*contrast+0.5f+brightness);const int length=std::max(1,(int)std::lround((float)(xEnd-x)*(0.16f+0.84f*l)));
    const int shift=(int)(hash32(params_.randomSeed^(std::uint32_t)row*0x9E3779B9u^(std::uint32_t)col*0x85EBCA6Bu)%std::max(1,segment/3));
    const float sourceAlpha=clamp01(alphaSum/(float)count);const float barLuma=0.20f+0.80f*l;const float alpha=sourceAlpha*(0.62f+0.38f*l)*amount;
    const int sx0=std::min(w-1,x+((int)phase+shift)%(std::max(1,segment/3)));

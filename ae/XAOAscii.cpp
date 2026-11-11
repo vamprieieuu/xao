@@ -80,7 +80,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_TOPICX("Randomization",PF_ParamFlag_START_COLLAPSED,P_TOPIC_RANDOM);
  PF_ADD_CHECKBOXX("Random Characters",1,0,P_RANDOM_CHAR);
  PF_ADD_CHECKBOXX("Random Words",0,0,P_RANDOM_WORD);
- PF_ADD_CHECKBOXX("Random Timing",0,0,P_RANDOM_TIMING);
+ PF_ADD_CHECKBOXX("Random Timing",1,0,P_RANDOM_TIMING);
  PF_ADD_FLOAT_SLIDERX("Random Amount",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_RANDOM_AMOUNT);
  PF_ADD_FLOAT_SLIDERX("Random Speed",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_RANDOM_SPEED);
  PF_ADD_FLOAT_SLIDERX("Random Seed",0,99999,0,99999,0,PF_Precision_INTEGER,0,0,P_RANDOM_SEED);
@@ -120,7 +120,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_POPUPX("Glyph Mapping",4,1,"Auto|Shape Match|Luminance Ramp|Edge Directional",0,P_MAPPING_MODE);
  PF_ADD_FLOAT_SLIDERX("Gamma",0.1,4.0,0.1,4.0,2.2,PF_Precision_TENTHS,0,0,P_GAMMA);
  PF_ADD_POPUPX("Character Tone Source",4,1,"Luma|Red|Green|Blue",0,P_CHANNEL_MODE);
- PF_ADD_POPUPX("Color Palette",10,1,"None|Monitor Glow|Game Boy DMG|Oil 6|Retrotronic|Gothic Bit|Curiosities|CGA Palette 1|CGA Palette 1 Bright|CGA Palette 0 Bright",0,P_PALETTE);
+ PF_ADD_POPUPX("Color Palette",10,1,"None|Green Phosphor|Game Boy DMG|Oil 6|Retrotronic|Gothic Bit|Curiosities|CGA Palette 1|CGA Palette 1 Bright|CGA Palette 0 Bright",0,P_PALETTE);
  PF_ADD_FLOAT_SLIDERX("Palette Strength",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_PALETTE_STRENGTH);
  PF_ADD_FLOAT_SLIDERX("Edge Threshold",0,1,0,1,0.15,PF_Precision_TENTHS,0,0,P_EDGE_THRESHOLD);
  PF_ADD_CHECKBOXX("Preserve Cell Alpha",1,0,P_PRESERVE_ALPHA);
