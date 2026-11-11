@@ -15,7 +15,7 @@ jobs:
      name: Checkout MAJEED SDK/build reference
      with:
       repository: vamprieieuu/Dithering_MAJEED_build_ready
-      ref: main
+      ref: ea1f39e974daccd11bec2c3802c9e424f26afdc6
       path: reference/majeed
    - uses: ilammy/msvc-dev-cmd@v1
      with:
@@ -30,6 +30,8 @@ jobs:
      run: cmake --build build --config Release --parallel
    - name: Test core
      run: ctest --test-dir build -C Release --output-on-failure
+   - name: Verify generated PiPL metadata
+     run: python ae/verify_pipl.py build/XAOAsciiPiPL.bin
    - name: Verify AEX
      shell: pwsh
      run: |
@@ -37,6 +39,8 @@ jobs:
       if (-not $aex) { throw "XAO_ASCII.aex was not produced." }
       $hash = (Get-FileHash $aex.FullName -Algorithm SHA256).Hash
       Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("AEX {0}; Bytes {1}; SHA256 {2}" -f $aex.FullName,$aex.Length,$hash)
+      $exports = dumpbin /exports $aex.FullName | Out-String
+      if ($exports -notmatch "EffectMain" -or $exports -notmatch "PluginDataEntryFunction2") { throw "Required AE exports are missing." }
       dumpbin /headers /exports /dependents $aex.FullName
    - uses: actions/upload-artifact@v4
      name: Upload XAO AEX

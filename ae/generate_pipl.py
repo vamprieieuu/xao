@@ -20,7 +20,7 @@ def make_resource() -> bytes:
         (b"RVSe", struct.pack("<HH", 13, 28)),
         (b"REVe", struct.pack("<I", 0x00080001)),
         (b"FNIe", b"\0\0"),
-        (b"OLGe", struct.pack("<I", 0x02000400)),
+        (b"OLGe", struct.pack("<I", 0x02000000)),
         (b"2LGe", struct.pack("<I", 0x08001400)),
         (b"ANMe", pascal("XAO_ASCII")),
         (b"LFea", struct.pack("<I", 0)),
