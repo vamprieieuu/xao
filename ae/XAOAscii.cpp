@@ -91,6 +91,7 @@ PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Edge Threshold",0,1,0,1,0.15,PF_Precision_TENTHS,0,0,P_EDGE_THRESHOLD);
  PF_ADD_CHECKBOXX("Selective Glow",0,0,P_GLOW_ENABLE);
  PF_ADD_POPUPX("Glow Selection",4,1,"Random Glyphs|Fixed Region|Random in Region|All Glyphs",0,P_GLOW_SELECTION);
+ PF_ADD_POPUPX("Glow Glyph Type",5,1,"All Characters|Letters|Numbers|Symbols|Words",0,P_GLOW_FILTER);
  PF_ADD_FLOAT_SLIDERX("Glow Amount",0,100,0,100,20,PF_Precision_INTEGER,0,0,P_GLOW_AMOUNT);
  PF_ADD_FLOAT_SLIDERX("Glow Radius",0,64,0,64,8,PF_Precision_INTEGER,0,0,P_GLOW_RADIUS);
  PF_ADD_FLOAT_SLIDERX("Glow Intensity",0,500,0,500,100,PF_Precision_INTEGER,0,0,P_GLOW_INTENSITY);
@@ -159,6 +160,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_EDGE_THRESHOLD,[&](PF_ParamDef& p){state->ascii.edgeThreshold=(float)p.u.fs_d.value;});
  read(P_GLOW_ENABLE,[&](PF_ParamDef& p){state->ascii.glowEnabled=p.u.bd.value!=0;});
  read(P_GLOW_SELECTION,[&](PF_ParamDef& p){state->ascii.glowSelection=(xao::AsciiGlowSelection)std::clamp<A_long>(p.u.pd.value-1,0,3);});
+ read(P_GLOW_FILTER,[&](PF_ParamDef& p){state->ascii.glowGlyphFilter=(xao::AsciiGlowGlyphFilter)std::clamp<A_long>(p.u.pd.value-1,0,4);});
  read(P_GLOW_AMOUNT,[&](PF_ParamDef& p){state->ascii.glowAmount=(float)p.u.fs_d.value/100.0f;});
  read(P_GLOW_RADIUS,[&](PF_ParamDef& p){state->ascii.glowRadius=(float)p.u.fs_d.value;});
  read(P_GLOW_INTENSITY,[&](PF_ParamDef& p){state->ascii.glowIntensity=(float)p.u.fs_d.value/100.0f;});
