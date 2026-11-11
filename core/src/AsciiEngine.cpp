@@ -84,6 +84,12 @@ const GlyphBitmap* selectGlyph(const std::vector<const GlyphBitmap*>& candidates
  return shapeBest[(std::size_t)random%pool].glyph;
 }
 Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
+void blurGlowMask(std::vector<float>& mask,std::vector<float>& temp,int w,int h,int radius){
+ if(radius<=0)return;
+ for(int y=0;y<h;++y){float sum=0.0f;int left=0,right=-1;for(int x=0;x<w;++x){const int wantLeft=std::max(0,x-radius),wantRight=std::min(w-1,x+radius);while(right<wantRight){++right;sum+=mask[(std::size_t)y*w+right];}while(left<wantLeft){sum-=mask[(std::size_t)y*w+left];++left;}temp[(std::size_t)y*w+x]=sum/(float)(right-left+1);}}
+ for(int x=0;x<w;++x){float sum=0.0f;int top=0,bottom=-1;for(int y=0;y<h;++y){const int wantTop=std::max(0,y-radius),wantBottom=std::min(h-1,y+radius);while(bottom<wantBottom){++bottom;sum+=temp[(std::size_t)bottom*w+x];}while(top<wantTop){sum-=temp[(std::size_t)top*w+x];++top;}mask[(std::size_t)y*w+x]=sum/(float)(bottom-top+1);}}
+}
+
 }
 const CratesPresetDefinition& cratesPreset(AsciiPresetId id) noexcept{auto i=(std::size_t)id;return kPresets[i<sizeof(kPresets)/sizeof(kPresets[0])?i:0];}
 std::string_view asciiCharacterSetName(AsciiCharacterSetId id) noexcept{
@@ -106,6 +112,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);
  float glyphScale=clampf(params_.glyphScale*(params_.characterSize/88.0f),.1f,1.5f);
  float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
+ std::vector<float> glowMask,glowTemp;if(params_.glowEnabled){glowMask.assign((std::size_t)w*h,0.0f);glowTemp.resize(glowMask.size());}
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.enableAncient||params_.enableEnglish||params_.enableArabic;
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
@@ -157,8 +164,23 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   Pixel fg=params_.colorize?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   fg=scaled(fg,alpha);Pixel bg=params_.preserveCellAlpha?scaled(params_.paper,alpha):params_.paper;
+  bool glowCell=false;
+  if(params_.glowEnabled){
+   const float cx=((float)x0+(float)x1)*0.5f/(float)w,cy=((float)y0+(float)y1)*0.5f/(float)h;
+   const float dx=cx-clampf(params_.glowCenterX,0,1),dy=cy-clampf(params_.glowCenterY,0,1);
+   const float region=clampf(params_.glowRegionSize,0.01f,1.0f)*0.5f;
+   const bool inRegion=dx*dx+dy*dy<=region*region;
+   const float random=(hash32(rv^0x610A5u)/(float)0xFFFFFFFFu);
+   switch(params_.glowSelection){case AsciiGlowSelection::FixedRegion:glowCell=inRegion;break;case AsciiGlowSelection::RandomInRegion:glowCell=inRegion&&random<clamp01(params_.glowAmount);break;case AsciiGlowSelection::All:glowCell=true;break;default:glowCell=random<clamp01(params_.glowAmount);break;}
+  }
   bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
-  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<x1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
+  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<x1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);if(glowCell)glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],c);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
+ }
+ if(params_.glowEnabled&&!glowMask.empty()){
+  const int radius=std::clamp((int)std::lround(params_.glowRadius),0,64);
+  blurGlowMask(glowMask,glowTemp,w,h,radius);
+  const float intensity=clampf(params_.glowIntensity,0,5),ga=clamp01(params_.glowColor.a);
+  for(int y=0;y<h;++y)for(int x=0;x<w;++x){const float amount=clamp01(glowMask[(std::size_t)y*w+x]*intensity)*ga;if(amount<=1e-6f)continue;Pixel& p=dst.row(y)[x];p.r+=params_.glowColor.r*amount;p.g+=params_.glowColor.g*amount;p.b+=params_.glowColor.b*amount;p.a=std::max(p.a,amount);}
  }
 }
 } // namespace xao
