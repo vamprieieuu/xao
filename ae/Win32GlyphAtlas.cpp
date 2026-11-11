@@ -18,7 +18,7 @@
 
 namespace xao::win32 {
 namespace {
-constexpr int kAtlasW=32,kAtlasH=24;
+constexpr int kAtlasW=96,kAtlasH=24;
 struct Token { std::wstring text; char32_t codepoint=0; bool word=false; bool number=false; bool rtl=false; bool s1Atlas=false; };
 std::wstring toWide(char32_t cp) {
  std::wstring s;
@@ -119,7 +119,15 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
   std::memset(bits,0,kAtlasW*kAtlasH*4);
   if(FAILED(drawShapedText(dc,token))){SelectObject(dc,oldFont);DeleteObject(chosen);continue;}
   GlyphBitmap g;g.codepoint=token.codepoint;g.wordToken=token.word;g.numberToken=token.number;g.width=kAtlasW;g.height=kAtlasH;g.coverage.resize(kAtlasW*kAtlasH);const auto* px=(const std::uint8_t*)bits;std::uint64_t sum=0;
-  for(int i=0;i<kAtlasW*kAtlasH;++i){std::uint8_t v=px[i*4+2];g.coverage[(std::size_t)i]=v;sum+=v;}g.density=(float)sum/(255.0f*kAtlasW*kAtlasH);if(sum){if(token.s1Atlas)s1Glyphs.push_back(std::move(g));else atlas->glyphs.push_back(std::move(g));}
+  for(int i=0;i<kAtlasW*kAtlasH;++i){std::uint8_t v=px[i*4+2];g.coverage[(std::size_t)i]=v;sum+=v;}
+  if(sum){int minX=kAtlasW,minY=kAtlasH,maxX=-1,maxY=-1;
+   for(int yy=0;yy<kAtlasH;++yy)for(int xx=0;xx<kAtlasW;++xx)if(g.coverage[(std::size_t)yy*kAtlasW+xx]>8){minX=std::min(minX,xx);minY=std::min(minY,yy);maxX=std::max(maxX,xx);maxY=std::max(maxY,yy);}
+   if(maxX>=minX&&maxY>=minY){const int cropW=maxX-minX+1,cropH=maxY-minY+1;std::vector<std::uint8_t> crop((std::size_t)cropW*cropH);std::uint64_t cropSum=0;
+    for(int yy=0;yy<cropH;++yy)for(int xx=0;xx<cropW;++xx){auto v=g.coverage[(std::size_t)(minY+yy)*kAtlasW+minX+xx];crop[(std::size_t)yy*cropW+xx]=v;cropSum+=v;}
+    g.width=cropW;g.height=cropH;g.coverage=std::move(crop);sum=cropSum;}
+   g.density=(float)sum/(255.0f*(float)g.width*(float)g.height);
+   if(token.s1Atlas)s1Glyphs.push_back(std::move(g));else atlas->glyphs.push_back(std::move(g));
+  }
   SelectObject(dc,oldFont);DeleteObject(chosen);
  }
  SelectObject(dc,oldBitmap);DeleteObject(bitmap);DeleteDC(dc);

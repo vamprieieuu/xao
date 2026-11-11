@@ -65,5 +65,10 @@ int main(){
  int thresholdPixels=0;for(const auto& px:thresholdOut.pixels())if(px.a>0.5f)++thresholdPixels;if(thresholdPixels<=0||thresholdPixels>=24*16)return fail("threshold look emits separated horizontal segments");
  xao::AsciiParams rainbowParams;rainbowParams.visualStyle=xao::AsciiVisualStyle::Rainbow;rainbowParams.colorize=false;xao::Image rainbowSource(16,8),rainbowOut(16,8);for(auto& px:rainbowSource.pixels())px={0.5f,0.5f,0.5f,1};xao::AsciiEngine rainbowEngine(rainbowParams);rainbowEngine.render(rainbowSource,rainbowOut,{});
  bool rainbowColor=false;for(const auto& px:rainbowOut.pixels())rainbowColor|=std::fabs(px.r-px.g)>0.03f||std::fabs(px.g-px.b)>0.03f;if(!rainbowColor)return fail("rainbow look produces chromatic glyphs");
+ // Multi-cell word rendering must cover more than the first character cell.
+ auto wideAtlas=std::make_shared<xao::GlyphAtlas>();xao::GlyphBitmap wideWord;wideWord.wordToken=true;wideWord.width=32;wideWord.height=8;wideWord.coverage.assign(256,255);wideWord.density=1.0f;wideAtlas->glyphs.push_back(wideWord);
+ xao::AsciiParams wideParams;wideParams.randomWords=true;wideParams.randomCharacters=false;wideParams.colorize=false;wideParams.cellSize=8;wideParams.wordSize=100;wideParams.atlas=wideAtlas;
+ xao::Image wideSource(48,8),wideOutput(48,8);for(auto& px:wideSource.pixels())px={0,0,0,1};xao::AsciiEngine wideEngine(wideParams);wideEngine.render(wideSource,wideOutput,{});
+ int wideInk=0;for(const auto& px:wideOutput.pixels())if(px.a>0.5f)++wideInk;if(wideInk<=64)return fail("word token spans multiple cells");
  std::cout<<"XAO ASCII engine tests passed\n";return 0;
 }

@@ -31,7 +31,7 @@ enum {
  P_GLOW_ENABLE,P_GLOW_SELECTION,P_GLOW_FILTER,P_GLOW_AMOUNT,P_GLOW_RADIUS,P_GLOW_INTENSITY,P_GLOW_X,P_GLOW_Y,P_GLOW_REGION,
  P_RAYS_ENABLE,P_RAYS_COUNT,P_RAYS_ANGLE,P_RAYS_SPREAD,P_RAYS_LENGTH,P_RAYS_INTENSITY,P_RAYS_SHARPNESS,P_RAYS_X,P_RAYS_Y,
  P_OVERRIDE_PRESET,P_INVERT_THRESHOLD,P_SMOOTH_SHADING,P_BLEND_ORIGINAL,P_RANDOM_COLOR_AMOUNT,P_X_FLIP_THRESHOLD,P_PRESERVE_ALPHA,
- P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_VISUAL_STYLE,P_THRESHOLD_LEVEL,P_THRESHOLD_WIDTH,P_THRESHOLD_SPACING,P_COUNT
+ P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_VISUAL_STYLE,P_THRESHOLD_LEVEL,P_THRESHOLD_WIDTH,P_THRESHOLD_SPACING,P_WORD_SIZE,P_COUNT
 };
 enum { T_LINEAR=1,T_REC709=2,T_SRGB=3 };
 struct State { xao::AsciiParams ascii; A_long transfer=T_LINEAR; };
@@ -75,6 +75,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Glyph Scale",0.1,1.5,0.1,1.5,0.88,PF_Precision_TENTHS,0,0,P_SCALE);
  PF_ADD_FLOAT_SLIDERX("Character Size",10,200,10,200,100,PF_Precision_INTEGER,0,0,P_CHAR_SIZE);
  PF_ADD_FLOAT_SLIDERX("Number Size",10,200,10,200,100,PF_Precision_INTEGER,0,0,P_NUMBER_SIZE);
+ PF_ADD_FLOAT_SLIDERX("Word Size",25,250,25,250,100,PF_Precision_INTEGER,0,0,P_WORD_SIZE);
  PF_ADD_FLOAT_SLIDERX("Character Margins",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_CHAR_MARGIN);
  PF_ADD_FLOAT_SLIDERX("Cell Margins",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_CELL_MARGIN);
  PF_ADD_FLOAT_SLIDERX("Contrast",0,3,0,3,1,PF_Precision_TENTHS,0,0,P_CONTRAST);
@@ -155,6 +156,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_SCALE,[&](PF_ParamDef& p){state->ascii.glyphScale=(float)p.u.fs_d.value;});
  read(P_CHAR_SIZE,[&](PF_ParamDef& p){state->ascii.characterSize*=std::clamp((float)p.u.fs_d.value/100.0f,0.1f,2.0f);});
  read(P_NUMBER_SIZE,[&](PF_ParamDef& p){state->ascii.numberSize=(float)p.u.fs_d.value;});
+ read(P_WORD_SIZE,[&](PF_ParamDef& p){state->ascii.wordSize=(float)p.u.fs_d.value;});
  read(P_CHAR_MARGIN,[&](PF_ParamDef& p){state->ascii.characterMargin=std::clamp(state->ascii.characterMargin+(float)p.u.fs_d.value,0.0f,180.0f);});
  read(P_CELL_MARGIN,[&](PF_ParamDef& p){state->ascii.cellMargin=std::clamp(state->ascii.cellMargin+(float)p.u.fs_d.value,0.0f,180.0f);});
  read(P_CONTRAST,[&](PF_ParamDef& p){state->ascii.contrast=(float)p.u.fs_d.value;});

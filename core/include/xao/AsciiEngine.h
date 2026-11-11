@@ -44,6 +44,7 @@ struct AsciiParams {
  float glyphScale=0.88f;
  float characterSize=88.0f;
  float numberSize=100.0f;
+ float wordSize=100.0f;
  float characterMargin=0.0f;
  float cellMargin=0.0f;
  float contrast=1.0f;

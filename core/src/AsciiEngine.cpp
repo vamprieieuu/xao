@@ -141,7 +141,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   const int y1=std::min(h,y0+rowHeight);
   for(int x0=0,colIndex=0;x0<w;++colIndex){
    int colWidth=cell;
-   if(params_.layoutMode==AsciiLayoutMode::LiquidPanels){
+   if(params_.layoutMode==AsciiLayoutMode::LiquidPanels||params_.visualStyle==AsciiVisualStyle::Liquid){
     const int minW=std::clamp(std::min(params_.panelMinWidth,params_.panelMaxWidth),1,8),maxW=std::clamp(std::max(params_.panelMinWidth,params_.panelMaxWidth),1,8);
     const std::uint32_t panelSeed=params_.randomSeed^((std::uint32_t)rowIndex*0x85EBCA6Bu)^((std::uint32_t)colIndex*0xC2B2AE35u);
     colWidth=cell*(minW+(int)(hash32(panelSeed)%(std::uint32_t)(maxW-minW+1)));
@@ -187,7 +187,10 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   const float glyphAspect=(glyph->height>0)?(float)glyph->width/(float)glyph->height:1.0f;
   const float cellAspect=aw/std::max(1.0f,ah);
   if(glyphAspect>cellAspect)dh=dw/glyphAspect;else dw=dh*glyphAspect;
-  float left=(x0+x1-dw)*.5f,top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
+  int drawX1=x1;float left=(x0+x1-dw)*.5f;
+  if(glyph->wordToken){dh=std::max(1.0f,ah*glyphScale*clampf(params_.wordSize/100.0f,.25f,2.5f)*(1-charMargin));dw=std::max(cw,dh*glyphAspect);dw=std::min(dw,(float)(w-x0));drawX1=std::min(w,std::max(x1,x0+(int)std::ceil(dw)));left=(float)x0+charMargin*cw;}
+  float top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
+  if(glyph->wordToken&&drawX1>x1){Pixel wa{0,0,0,0};int wn=0;for(int yy=y0;yy<y1;++yy)for(int xx=x0;xx<drawX1;++xx){const Pixel& q=src.row(yy)[xx];wa.r+=q.r;wa.g+=q.g;wa.b+=q.b;wa.a+=q.a;++wn;}if(wn){float wi=1.0f/(float)wn;avg={wa.r*wi,wa.g*wi,wa.b*wi,wa.a*wi};}}
   Pixel fg=params_.colorize?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
   if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   if(params_.visualStyle==AsciiVisualStyle::Rainbow){
@@ -218,10 +221,20 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    }
   }
   bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
-  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<x1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);if(glowCell)glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],c*alpha);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
-   x0=x1;
+  for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);if(glowCell)glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],c*alpha);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
+   x0=drawX1;
   }
   y0=y1;
+ }
+ if(params_.visualStyle==AsciiVisualStyle::Mosaic){
+  const int tile=std::clamp(cell*3,6,384);
+  for(int ty=0;ty<h;ty+=tile)for(int tx=0;tx<w;tx+=tile){
+   Pixel avgTile{0,0,0,0};int count=0;for(int yy=ty;yy<std::min(h,ty+tile);++yy)for(int xx=tx;xx<std::min(w,tx+tile);++xx){const Pixel& q=src.at(xx,yy);avgTile.r+=q.r;avgTile.g+=q.g;avgTile.b+=q.b;avgTile.a+=q.a;++count;}
+   if(!count)continue;const float invTile=1.0f/(float)count;avgTile.r*=invTile;avgTile.g*=invTile;avgTile.b*=invTile;avgTile.a*=invTile;
+   const float lum=clamp01(.2126f*avgTile.r+.7152f*avgTile.g+.0722f*avgTile.b);
+   avgTile.r=avgTile.r*0.45f+lum*0.55f;avgTile.g=avgTile.g*0.45f+lum*0.55f;avgTile.b=avgTile.b*0.45f+lum*0.55f;
+   for(int yy=ty;yy<std::min(h,ty+tile);++yy)for(int xx=tx;xx<std::min(w,tx+tile);++xx){Pixel& q=dst.at(xx,yy);q.r=q.r*0.58f+avgTile.r*0.42f;q.g=q.g*0.58f+avgTile.g*0.42f;q.b=q.b*0.58f+avgTile.b*0.42f;q.a=std::max(q.a,avgTile.a*0.42f);}
+  }
  }
  if(params_.visualStyle==AsciiVisualStyle::Threshold){
   for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)={0,0,0,0};
@@ -242,7 +255,8 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   const float intensity=clampf(params_.glowIntensity,0,5),ga=clamp01(params_.glowColor.a);
   for(int y=0;y<h;++y)for(int x=0;x<w;++x){const float amount=clamp01(glowMask[(std::size_t)y*w+x]*intensity)*ga;if(amount<=1e-6f)continue;Pixel& p=dst.row(y)[x];p.r+=params_.glowColor.r*amount;p.g+=params_.glowColor.g*amount;p.b+=params_.glowColor.b*amount;p.a=std::max(p.a,amount);}
  }
- if(params_.raysEnabled){
+ const bool styleRays=params_.visualStyle==AsciiVisualStyle::Ghost;
+ if(params_.raysEnabled||styleRays){
   constexpr float pi=3.14159265358979323846f;
   const float originX=clampf(params_.raysOriginX,0,1),originY=clampf(params_.raysOriginY,0,1);
   const float spread=clampf(params_.raysSpread,1,360)*pi/180.0f;
@@ -250,7 +264,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   const float rayCount=clampf(params_.raysCount,1,64);
   const float sharpness=clampf(params_.raysSharpness,1,20);
   const float length=clampf(params_.raysLength,0.01f,2.0f);
-  const float intensity=clampf(params_.raysIntensity,0,5),colorAlpha=clamp01(params_.raysColor.a);
+  const float intensity=clampf(params_.raysIntensity,0,5)*(styleRays?0.65f:1.0f),colorAlpha=clamp01(params_.raysColor.a);
   const float aspectX=(float)w/(float)std::max(w,h),aspectY=(float)h/(float)std::max(w,h);
   for(int y=0;y<h;++y)for(int x=0;x<w;++x){
    const float dx=((x+0.5f)/(float)w-originX)*aspectX,dy=((y+0.5f)/(float)h-originY)*aspectY;
