@@ -89,6 +89,14 @@ PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Gamma",0.1,4.0,0.1,4.0,2.2,PF_Precision_TENTHS,0,0,P_GAMMA);
  PF_ADD_POPUPX("Characters Based On",4,1,"Luma|Red|Green|Blue",0,P_CHANNEL_MODE);
  PF_ADD_FLOAT_SLIDERX("Edge Threshold",0,1,0,1,0.15,PF_Precision_TENTHS,0,0,P_EDGE_THRESHOLD);
+ PF_ADD_CHECKBOXX("Selective Glow",0,0,P_GLOW_ENABLE);
+ PF_ADD_POPUPX("Glow Selection",4,1,"Random Glyphs|Fixed Region|Random in Region|All Glyphs",0,P_GLOW_SELECTION);
+ PF_ADD_FLOAT_SLIDERX("Glow Amount",0,100,0,100,20,PF_Precision_INTEGER,0,0,P_GLOW_AMOUNT);
+ PF_ADD_FLOAT_SLIDERX("Glow Radius",0,64,0,64,8,PF_Precision_INTEGER,0,0,P_GLOW_RADIUS);
+ PF_ADD_FLOAT_SLIDERX("Glow Intensity",0,500,0,500,100,PF_Precision_INTEGER,0,0,P_GLOW_INTENSITY);
+ PF_ADD_FLOAT_SLIDERX("Glow Position X",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_GLOW_X);
+ PF_ADD_FLOAT_SLIDERX("Glow Position Y",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_GLOW_Y);
+ PF_ADD_FLOAT_SLIDERX("Glow Region Size",1,100,1,100,25,PF_Precision_INTEGER,0,0,P_GLOW_REGION);
  PF_ADD_CHECKBOXX("Override Preset Tuning",0,0,P_OVERRIDE_PRESET);
  PF_ADD_FLOAT_SLIDERX("Invert Threshold",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_INVERT_THRESHOLD);
  PF_ADD_FLOAT_SLIDERX("Smooth Shading",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_SMOOTH_SHADING);
@@ -149,6 +157,14 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_GAMMA,[&](PF_ParamDef& p){state->ascii.gamma=(float)p.u.fs_d.value;});
  read(P_CHANNEL_MODE,[&](PF_ParamDef& p){state->ascii.channelMode=(xao::AsciiChannelMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
  read(P_EDGE_THRESHOLD,[&](PF_ParamDef& p){state->ascii.edgeThreshold=(float)p.u.fs_d.value;});
+ read(P_GLOW_ENABLE,[&](PF_ParamDef& p){state->ascii.glowEnabled=p.u.bd.value!=0;});
+ read(P_GLOW_SELECTION,[&](PF_ParamDef& p){state->ascii.glowSelection=(xao::AsciiGlowSelection)std::clamp<A_long>(p.u.pd.value-1,0,3);});
+ read(P_GLOW_AMOUNT,[&](PF_ParamDef& p){state->ascii.glowAmount=(float)p.u.fs_d.value/100.0f;});
+ read(P_GLOW_RADIUS,[&](PF_ParamDef& p){state->ascii.glowRadius=(float)p.u.fs_d.value;});
+ read(P_GLOW_INTENSITY,[&](PF_ParamDef& p){state->ascii.glowIntensity=(float)p.u.fs_d.value/100.0f;});
+ read(P_GLOW_X,[&](PF_ParamDef& p){state->ascii.glowCenterX=(float)p.u.fs_d.value/100.0f;});
+ read(P_GLOW_Y,[&](PF_ParamDef& p){state->ascii.glowCenterY=(float)p.u.fs_d.value/100.0f;});
+ read(P_GLOW_REGION,[&](PF_ParamDef& p){state->ascii.glowRegionSize=(float)p.u.fs_d.value/100.0f;});
  bool overridePresetTuning=false;
  read(P_OVERRIDE_PRESET,[&](PF_ParamDef& p){overridePresetTuning=p.u.bd.value!=0;});
  if(overridePresetTuning){
