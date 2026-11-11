@@ -102,7 +102,7 @@ std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept
 }
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas(){static const auto a=makeBuiltin();return a;}
 void applyCratesPreset(AsciiParams& p,AsciiPresetId id) noexcept{
- const auto& v=cratesPreset(id);p.preset=id;p.characterSize=v.characterSize;p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=v.randomShuffle>0;p.randomTiming=v.randomSpeed>0;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);
+ const auto& v=cratesPreset(id);p.preset=id;p.presetCharacterSize=v.characterSize;p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=v.randomShuffle>0;p.randomTiming=v.randomSpeed>0;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);
 }
 void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) const{
  if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
@@ -110,10 +110,10 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  int w=src.width(),h=src.height(),cell=std::max(2,std::min(256,params_.cellSize));
  if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
  float contrast=clampf(params_.contrast*(params_.asciiStrength/100.0f),0,4),brightness=clampf(params_.brightness,-1,1);
- float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f);
+ float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f)*clampf(params_.presetCharacterSize/100.0f,.1f,3.0f);
  if(params_.visualStyle==AsciiVisualStyle::Micro)glyphScale*=0.68f;
  if(params_.visualStyle==AsciiVisualStyle::Photorealistic)glyphScale*=0.92f;
- float charMargin=params_.useCharacterMargin?clampf(params_.characterMargin/200.0f,0,.45f):0.0f,cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
+ float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
 
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.ancientLetters||params_.ancientNumbers||params_.ancientWords||params_.englishLetters||params_.englishNumbers||params_.englishWords||params_.arabicLetters||params_.arabicNumbers||params_.arabicWords;
