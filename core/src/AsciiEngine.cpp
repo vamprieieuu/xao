@@ -47,6 +47,14 @@ float sampleChannel(const Pixel& p,AsciiChannelMode mode) noexcept{
  const float r=clamp01(p.r/p.a),g=clamp01(p.g/p.a),b=clamp01(p.b/p.a);
  switch(mode){case AsciiChannelMode::Red:return r;case AsciiChannelMode::Green:return g;case AsciiChannelMode::Blue:return b;default:return clamp01(.2126f*r+.7152f*g+.0722f*b);}
 }
+bool isLetterCodepoint(char32_t cp) noexcept{
+ return (cp>=U'A'&&cp<=U'Z')||(cp>=U'a'&&cp<=U'z')||
+  (cp>=0x0370&&cp<=0x03FF)||(cp>=0x0600&&cp<=0x06FF)||
+  (cp>=0x1681&&cp<=0x169A)||(cp>=0x16A0&&cp<=0x16FF)||
+  (cp>=0x3040&&cp<=0x30FF)||(cp>=0x4E00&&cp<=0x9FFF)||
+  (cp>=0x10330&&cp<=0x1034A)||(cp>=0x10380&&cp<=0x103C3)||
+  (cp>=0x10900&&cp<=0x10915);
+}
 float srgbToLinear(float v) noexcept{return v<=.04045f?v/12.92f:std::pow((v+.055f)/1.055f,2.4f);}
 float maskAt(const GlyphBitmap& g,float u,float v,bool aa) noexcept{
  if(g.width<=0||g.height<=0||g.coverage.size()<(std::size_t)(g.width*g.height))return 0;
@@ -166,12 +174,22 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   fg=scaled(fg,alpha);Pixel bg=params_.preserveCellAlpha?scaled(params_.paper,alpha):params_.paper;
   bool glowCell=false;
   if(params_.glowEnabled){
-   const float cx=((float)x0+(float)x1)*0.5f/(float)w,cy=((float)y0+(float)y1)*0.5f/(float)h;
-   const float dx=cx-clampf(params_.glowCenterX,0,1),dy=cy-clampf(params_.glowCenterY,0,1);
-   const float region=clampf(params_.glowRegionSize,0.01f,1.0f)*0.5f;
-   const bool inRegion=dx*dx+dy*dy<=region*region;
-   const float random=(hash32(rv^0x610A5u)/(float)0xFFFFFFFFu);
-   switch(params_.glowSelection){case AsciiGlowSelection::FixedRegion:glowCell=inRegion;break;case AsciiGlowSelection::RandomInRegion:glowCell=inRegion&&random<clamp01(params_.glowAmount);break;case AsciiGlowSelection::All:glowCell=true;break;default:glowCell=random<clamp01(params_.glowAmount);break;}
+   bool categoryMatch=true;
+   switch(params_.glowGlyphFilter){
+    case AsciiGlowGlyphFilter::Letters:categoryMatch=!glyph->wordToken&&!glyph->numberToken&&isLetterCodepoint(glyph->codepoint);break;
+    case AsciiGlowGlyphFilter::Numbers:categoryMatch=glyph->numberToken;break;
+    case AsciiGlowGlyphFilter::Symbols:categoryMatch=!glyph->wordToken&&!glyph->numberToken&&!isLetterCodepoint(glyph->codepoint);break;
+    case AsciiGlowGlyphFilter::Words:categoryMatch=glyph->wordToken;break;
+    default:break;
+   }
+   if(categoryMatch){
+    const float cx=((float)x0+(float)x1)*0.5f/(float)w,cy=((float)y0+(float)y1)*0.5f/(float)h;
+    const float dx=cx-clampf(params_.glowCenterX,0,1),dy=cy-clampf(params_.glowCenterY,0,1);
+    const float region=clampf(params_.glowRegionSize,0.01f,1.0f)*0.5f;
+    const bool inRegion=dx*dx+dy*dy<=region*region;
+    const float random=(hash32(rv^0x610A5u)/(float)0xFFFFFFFFu);
+    switch(params_.glowSelection){case AsciiGlowSelection::FixedRegion:glowCell=inRegion;break;case AsciiGlowSelection::RandomInRegion:glowCell=inRegion&&random<clamp01(params_.glowAmount);break;case AsciiGlowSelection::All:glowCell=true;break;default:glowCell=random<clamp01(params_.glowAmount);break;}
+   }
   }
   bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
   for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<x1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);if(glowCell)glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],c);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}
