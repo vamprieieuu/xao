@@ -38,6 +38,9 @@ constexpr char32_t kS1AtlasChars[]=U" \u0060.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI3
 constexpr char32_t kS1Blocks[]=U" \u2591\u2592\u2593\u2588";
 constexpr char32_t kS1Quadrants[]=U" \u2580\u2584\u258C\u2590\u2588\u2596\u2597\u2598\u2599\u259A\u259B\u259C\u259D\u259E\u259F";
 constexpr char32_t kS1BoxDrawing[]=U" \u2504\u2500\u253C\u254B\u2588";
+constexpr char32_t kAsciiArtMainStandard[]=U"@%#*+=-:. ";
+constexpr char32_t kAsciiArtMainSimple[]=U"@#+. ";
+constexpr char32_t kAsciiArtMainDetailed[]=U"$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^\x60'. ";
 constexpr char32_t kEmpty[]=U"";
 float clamp01(float v) noexcept{return std::max(0.0f,std::min(1.0f,v));}
 float clampf(float v,float lo,float hi) noexcept{return std::max(lo,std::min(hi,v));}
@@ -101,12 +104,12 @@ void blurGlowMask(std::vector<float>& mask,std::vector<float>& temp,int w,int h,
 }
 const CratesPresetDefinition& cratesPreset(AsciiPresetId id) noexcept{auto i=(std::size_t)id;return kPresets[i<sizeof(kPresets)/sizeof(kPresets[0])?i:0];}
 std::string_view asciiCharacterSetName(AsciiCharacterSetId id) noexcept{
- static constexpr std::array<std::string_view,24> names{{"Special Characters and Letters","Special Characters and Numbers","Classic Typewriter","Japanese Characters","Binary","Minimal Punk","X's","Bubble Growth","Stars","Diamonds","Dots","Circuits 1","Circuits 2","Alien Font","Bars","Classic","Minimal","Detailed","Bourke","Braille","Katakana","Blocks","Quadrants","Box Drawing"}};
+ static constexpr std::array<std::string_view,27> names{{"Special Characters and Letters","Special Characters and Numbers","Classic Typewriter","Japanese Characters","Binary","Minimal Punk","X's","Bubble Growth","Stars","Diamonds","Dots","Circuits 1","Circuits 2","Alien Font","Bars","Classic","Minimal","Detailed","Bourke","Braille","Katakana","Blocks","Quadrants","Box Drawing","ASCII Art Main Standard","ASCII Art Main Simple","ASCII Art Main Detailed"}};
  auto i=(std::size_t)id;return i<names.size()?names[i]:names[0];
 }
 std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept{
  switch(id){
- case AsciiCharacterSetId::CratesSpecialLetters:return k0;case AsciiCharacterSetId::CratesSpecialNumbers:return k1;case AsciiCharacterSetId::CratesTypewriter:return k2;case AsciiCharacterSetId::CratesJapanese:return k3;case AsciiCharacterSetId::CratesBinary:return k4;case AsciiCharacterSetId::CratesMinimalPunk:return k5;case AsciiCharacterSetId::CratesXs:return k6;case AsciiCharacterSetId::CratesBubbleGrowth:return k7;case AsciiCharacterSetId::CratesStars:return k8;case AsciiCharacterSetId::CratesDiamonds:return k9;case AsciiCharacterSetId::CratesDots:return k10;case AsciiCharacterSetId::CratesCircuits1:return k11;case AsciiCharacterSetId::CratesCircuits2:return k12;case AsciiCharacterSetId::CratesAlienFont:return k13;case AsciiCharacterSetId::CratesBars:return k14;case AsciiCharacterSetId::S1Classic:return kS1AtlasChars;case AsciiCharacterSetId::S1Minimal:return kS1AtlasChars;case AsciiCharacterSetId::S1Detailed:return kS1AtlasChars;case AsciiCharacterSetId::S1Bourke:return kS1AtlasChars;case AsciiCharacterSetId::S1Blocks:return kS1Blocks;case AsciiCharacterSetId::S1Quadrants:return kS1Quadrants;case AsciiCharacterSetId::S1BoxDrawing:return kS1BoxDrawing;default:return kEmpty;
+ case AsciiCharacterSetId::CratesSpecialLetters:return k0;case AsciiCharacterSetId::CratesSpecialNumbers:return k1;case AsciiCharacterSetId::CratesTypewriter:return k2;case AsciiCharacterSetId::CratesJapanese:return k3;case AsciiCharacterSetId::CratesBinary:return k4;case AsciiCharacterSetId::CratesMinimalPunk:return k5;case AsciiCharacterSetId::CratesXs:return k6;case AsciiCharacterSetId::CratesBubbleGrowth:return k7;case AsciiCharacterSetId::CratesStars:return k8;case AsciiCharacterSetId::CratesDiamonds:return k9;case AsciiCharacterSetId::CratesDots:return k10;case AsciiCharacterSetId::CratesCircuits1:return k11;case AsciiCharacterSetId::CratesCircuits2:return k12;case AsciiCharacterSetId::CratesAlienFont:return k13;case AsciiCharacterSetId::CratesBars:return k14;case AsciiCharacterSetId::S1Classic:return kS1AtlasChars;case AsciiCharacterSetId::S1Minimal:return kS1AtlasChars;case AsciiCharacterSetId::S1Detailed:return kS1AtlasChars;case AsciiCharacterSetId::S1Bourke:return kS1AtlasChars;case AsciiCharacterSetId::S1Blocks:return kS1Blocks;case AsciiCharacterSetId::S1Quadrants:return kS1Quadrants;case AsciiCharacterSetId::S1BoxDrawing:return kS1BoxDrawing;case AsciiCharacterSetId::AsciiArtMainStandard:return kAsciiArtMainStandard;case AsciiCharacterSetId::AsciiArtMainSimple:return kAsciiArtMainSimple;case AsciiCharacterSetId::AsciiArtMainDetailed:return kAsciiArtMainDetailed;default:return kEmpty;
  }
 }
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas(){static const auto a=makeBuiltin();return a;}
