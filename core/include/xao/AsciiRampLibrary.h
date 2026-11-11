@@ -17,7 +17,8 @@ inline constexpr std::array<AsciiRampDefinition,3> kAsciiArtMainRamps{{
  return std::clamp(contrast*(y-0.5f)+0.5f+brightness,0.0f,1.0f);
 }
 [[nodiscard]] inline std::size_t asciiRampIndex(float luminance01,std::size_t rampSize,bool invert=false) noexcept {
- if(rampSize==0)return 0;const float y=invert?(1.0f-luminance01):luminance01;
+ if(rampSize==0)return 0;
+ const float y=invert?(1.0f-luminance01):luminance01;
  return std::min(static_cast<std::size_t>(y*static_cast<float>(rampSize-1)+0.5f),rampSize-1);
 }
 [[nodiscard]] inline float asciiGammaLuminance(float linearLuma,float gamma=2.2f) noexcept {
