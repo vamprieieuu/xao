@@ -1,5 +1,6 @@
 #pragma once
 #include "xao/Engine.h"
+#include "xao/AsciiReferencePalettes.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -45,6 +46,8 @@ struct AsciiParams {
  float characterSize=88.0f;
  float numberSize=100.0f;
  float wordSize=100.0f;
+ std::uint8_t paletteIndex=0;
+ float paletteStrength=100.0f;
  float characterMargin=0.0f;
  float cellMargin=0.0f;
  float contrast=1.0f;
