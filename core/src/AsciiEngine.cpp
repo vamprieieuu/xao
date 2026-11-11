@@ -41,7 +41,11 @@ constexpr char32_t kEmpty[]=U"";
 float clamp01(float v) noexcept{return std::max(0.0f,std::min(1.0f,v));}
 float clampf(float v,float lo,float hi) noexcept{return std::max(lo,std::min(hi,v));}
 std::uint32_t hash32(std::uint32_t x) noexcept{x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
-float lum(const Pixel& p) noexcept{if(p.a<=1e-8f)return 0;return clamp01((.2126f*p.r+.7152f*p.g+.0722f*p.b)/p.a);}
+float sampleChannel(const Pixel& p,AsciiChannelMode mode) noexcept{
+ if(p.a<=1e-8f)return 0.0f;
+ const float r=clamp01(p.r/p.a),g=clamp01(p.g/p.a),b=clamp01(p.b/p.a);
+ switch(mode){case AsciiChannelMode::Red:return r;case AsciiChannelMode::Green:return g;case AsciiChannelMode::Blue:return b;default:return clamp01(.2126f*r+.7152f*g+.0722f*b);}
+}
 float srgbToLinear(float v) noexcept{return v<=.04045f?v/12.92f:std::pow((v+.055f)/1.055f,2.4f);}
 float maskAt(const GlyphBitmap& g,float u,float v,bool aa) noexcept{
  if(g.width<=0||g.height<=0||g.coverage.size()<(std::size_t)(g.width*g.height))return 0;
@@ -108,7 +112,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  if(candidates.empty())return;
  for(int y0=0;y0<h;y0+=cell)for(int x0=0;x0<w;x0+=cell){
   int x1=std::min(w,x0+cell),y1=std::min(h,y0+cell);std::array<float,64> target{};Pixel avg{0,0,0,0};double alphaSum=0;int n=0;
-  for(int sy=0;sy<8;++sy)for(int sx=0;sx<8;++sx){int px=std::min(x1-1,x0+(int)((sx+.5f)*(x1-x0)/8.0f)),py=std::min(y1-1,y0+(int)((sy+.5f)*(y1-y0)/8.0f));const Pixel& p=src.row(py)[px];float a=clamp01(p.a);target[(std::size_t)sy*8+sx]=clamp01((1-lum(p))*a);avg.r+=p.r;avg.g+=p.g;avg.b+=p.b;avg.a+=p.a;alphaSum+=a;++n;}
+  for(int sy=0;sy<8;++sy)for(int sx=0;sx<8;++sx){int px=std::min(x1-1,x0+(int)((sx+.5f)*(x1-x0)/8.0f)),py=std::min(y1-1,y0+(int)((sy+.5f)*(y1-y0)/8.0f));const Pixel& p=src.row(py)[px];float a=clamp01(p.a);target[(std::size_t)sy*8+sx]=clamp01((1-sampleChannel(p,params_.channelMode))*a);avg.r+=p.r;avg.g+=p.g;avg.b+=p.b;avg.a+=p.a;alphaSum+=a;++n;}
   float inv=1.0f/n;avg.r*=inv;avg.g*=inv;avg.b*=inv;avg.a*=inv;float mean=0;for(float v:target)mean+=v;mean/=64;
   if(params_.uniformLuma)for(float& v:target)v=mean;
   if(params_.reverseOrder)for(float& v:target)v=1-v;
