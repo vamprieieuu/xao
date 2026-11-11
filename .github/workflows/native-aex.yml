@@ -43,18 +43,22 @@ jobs:
      run: ctest --test-dir build -C Release --output-on-failure
    - name: Verify generated PiPL metadata
      run: python ae/verify_pipl.py build/XAOAsciiPiPL.bin
-   - name: Verify AEX
+   - name: Verify and stage direct AEX
      shell: pwsh
      run: |
       $aex = Get-ChildItem build -Filter "XAO.aex" -Recurse -File | Select-Object -First 1
       if (-not $aex) { throw "XAO.aex was not produced." }
-      $hash = (Get-FileHash $aex.FullName -Algorithm SHA256).Hash
-      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("AEX {0}; Bytes {1}; SHA256 {2}" -f $aex.FullName,$aex.Length,$hash)
-      $exports = dumpbin /exports $aex.FullName | Out-String
+      $stage = Join-Path $env:GITHUB_WORKSPACE "build/release"
+      New-Item -ItemType Directory -Force -Path $stage | Out-Null
+      $direct = Join-Path $stage "XAO.aex"
+      Copy-Item -LiteralPath $aex.FullName -Destination $direct -Force
+      $hash = (Get-FileHash $direct -Algorithm SHA256).Hash
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("AEX {0}; Bytes {1}; SHA256 {2}" -f $direct,(Get-Item $direct).Length,$hash)
+      $exports = dumpbin /exports $direct | Out-String
       if ($exports -notmatch "EffectMain" -or $exports -notmatch "PluginDataEntryFunction2") { throw "Required AE exports are missing." }
-      python ae/verify_aex.py $aex.FullName build/XAOAsciiPiPL.bin
+      python ae/verify_aex.py $direct build/XAOAsciiPiPL.bin
       if ($LASTEXITCODE -ne 0) { throw "Strict AEX verification failed." }
-      dumpbin /headers /exports /dependents $aex.FullName
+      dumpbin /headers /exports /dependents $direct
    - name: Publish direct AEX release asset
      uses: softprops/action-gh-release@v2
      with:
@@ -64,8 +68,16 @@ jobs:
       body: Automated XAO native After Effects plugin build. The release asset is the raw .aex file (not a ZIP archive).
       prerelease: true
       draft: false
-      files: build/bin/Release/XAO.aex
+      files: build/release/XAO.aex
       fail_on_unmatched_files: true
+   - name: Upload XAO AEX to workflow artifacts
+     uses: actions/upload-artifact@v4
+     with:
+      name: XAO-AEX-Direct
+      path: build/release/XAO.aex
+      if-no-files-found: error
+      compression-level: 0
+      retention-days: 30
    - name: Publish direct download link
      if: success()
      shell: pwsh
