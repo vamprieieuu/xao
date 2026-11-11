@@ -33,9 +33,10 @@ constexpr char32_t k11[]=U"[]{}<>+-|_/";
 constexpr char32_t k12[]=U"[]{}<>+-|_=:/\\";
 constexpr char32_t k13[]=U"0123456789ABCDEF";
 constexpr char32_t k14[]=U"|/\\-_=.";
-constexpr char32_t k15[]=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-constexpr char32_t k16[]=U" .:-=+*#%@";
-constexpr char32_t k17[]=U"$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^'. ";
+constexpr char32_t kS1AtlasChars[]=U" \u0060.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@";
+constexpr char32_t kS1Blocks[]=U" \u2591\u2592\u2593\u2588";
+constexpr char32_t kS1Quadrants[]=U" \u2580\u2584\u258C\u2590\u2588\u2596\u2597\u2598\u2599\u259A\u259B\u259C\u259D\u259E\u259F";
+constexpr char32_t kS1BoxDrawing[]=U" \u2504\u2500\u253C\u254B\u2588";
 constexpr char32_t kEmpty[]=U"";
 float clamp01(float v) noexcept{return std::max(0.0f,std::min(1.0f,v));}
 float clampf(float v,float lo,float hi) noexcept{return std::max(lo,std::min(hi,v));}
@@ -85,7 +86,7 @@ std::string_view asciiCharacterSetName(AsciiCharacterSetId id) noexcept{
 }
 std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept{
  switch(id){
- case AsciiCharacterSetId::CratesSpecialLetters:return k0;case AsciiCharacterSetId::CratesSpecialNumbers:return k1;case AsciiCharacterSetId::CratesTypewriter:return k2;case AsciiCharacterSetId::CratesJapanese:return k3;case AsciiCharacterSetId::CratesBinary:return k4;case AsciiCharacterSetId::CratesMinimalPunk:return k5;case AsciiCharacterSetId::CratesXs:return k6;case AsciiCharacterSetId::CratesBubbleGrowth:return k7;case AsciiCharacterSetId::CratesStars:return k8;case AsciiCharacterSetId::CratesDiamonds:return k9;case AsciiCharacterSetId::CratesDots:return k10;case AsciiCharacterSetId::CratesCircuits1:return k11;case AsciiCharacterSetId::CratesCircuits2:return k12;case AsciiCharacterSetId::CratesAlienFont:return k13;case AsciiCharacterSetId::CratesBars:return k14;case AsciiCharacterSetId::S1Classic:return k15;case AsciiCharacterSetId::S1Minimal:return k16;case AsciiCharacterSetId::S1Detailed:return k17;case AsciiCharacterSetId::S1Bourke:return k17;default:return kEmpty;
+ case AsciiCharacterSetId::CratesSpecialLetters:return k0;case AsciiCharacterSetId::CratesSpecialNumbers:return k1;case AsciiCharacterSetId::CratesTypewriter:return k2;case AsciiCharacterSetId::CratesJapanese:return k3;case AsciiCharacterSetId::CratesBinary:return k4;case AsciiCharacterSetId::CratesMinimalPunk:return k5;case AsciiCharacterSetId::CratesXs:return k6;case AsciiCharacterSetId::CratesBubbleGrowth:return k7;case AsciiCharacterSetId::CratesStars:return k8;case AsciiCharacterSetId::CratesDiamonds:return k9;case AsciiCharacterSetId::CratesDots:return k10;case AsciiCharacterSetId::CratesCircuits1:return k11;case AsciiCharacterSetId::CratesCircuits2:return k12;case AsciiCharacterSetId::CratesAlienFont:return k13;case AsciiCharacterSetId::CratesBars:return k14;case AsciiCharacterSetId::S1Classic:return kS1AtlasChars;case AsciiCharacterSetId::S1Minimal:return kS1AtlasChars;case AsciiCharacterSetId::S1Detailed:return kS1AtlasChars;case AsciiCharacterSetId::S1Bourke:return kS1AtlasChars;case AsciiCharacterSetId::S1Blocks:return kS1Blocks;case AsciiCharacterSetId::S1Quadrants:return kS1Quadrants;case AsciiCharacterSetId::S1BoxDrawing:return kS1BoxDrawing;default:return kEmpty;
  }
 }
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas(){static const auto a=makeBuiltin();return a;}
