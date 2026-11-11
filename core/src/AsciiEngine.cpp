@@ -128,7 +128,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  auto atlas=params_.atlas?params_.atlas:builtinAsciiGlyphAtlas();std::vector<const GlyphBitmap*> candidates;
  auto set=asciiCharacterSetCodepoints(params_.characterSet);bool groups=params_.enableAncient||params_.enableEnglish||params_.enableArabic;
  const bool includeWords=params_.randomWords||params_.ancientWords||params_.englishWords||params_.arabicWords;
- for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!groups&&!set.empty()&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
+ for(const auto& g:atlas->glyphs){if(g.wordToken&&!includeWords)continue;if(!groups&&!set.empty()&&!g.wordToken&&g.codepoint&&set.find(g.codepoint)==std::u32string_view::npos)continue;candidates.push_back(&g);}
  if(candidates.empty()&&!params_.randomWords)for(const auto& g:builtinAsciiGlyphAtlas()->glyphs)candidates.push_back(&g);
  if(candidates.empty())return;
  for(int y0=0;y0<h;y0+=cell)for(int x0=0;x0<w;x0+=cell){
