@@ -40,7 +40,7 @@ if(XAO_BUILD_AE_PLUGIN)
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ae/generate_pipl.py" "${PIPL_RC}" "${PIPL_BIN}"
   DEPENDS ae/generate_pipl.py VERBATIM COMMENT "Generating XAO PiPL resource")
  add_library(XAO SHARED ae/XAOAscii.cpp ae/Win32GlyphAtlas.cpp "${PIPL_RC}")
- target_link_libraries(XAO PRIVATE xao_core AESDK gdi32 user32)
+ target_link_libraries(XAO PRIVATE xao_core AESDK gdi32 user32 usp10)
  target_compile_features(XAO PRIVATE cxx_std_17)
  target_compile_definitions(XAO PRIVATE MSWindows _WINDOWS WIN32 _WIN32 _WIN64 AE_OS_WIN _CRT_SECURE_NO_WARNINGS)
  target_compile_options(XAO PRIVATE /W4 /permissive- /EHsc /O2)
