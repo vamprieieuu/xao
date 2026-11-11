@@ -86,6 +86,13 @@ PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_POPUPX("Glyph Mapping",4,1,"Auto|Shape Match|Luminance Ramp|Edge Directional",0,P_MAPPING_MODE);
  PF_ADD_FLOAT_SLIDERX("Gamma",0.1,4.0,0.1,4.0,2.2,PF_Precision_TENTHS,0,0,P_GAMMA);
  PF_ADD_POPUPX("Characters Based On",4,1,"Luma|Red|Green|Blue",0,P_CHANNEL_MODE);
+ PF_ADD_FLOAT_SLIDERX("Edge Threshold",0,1,0,1,0.15,PF_Precision_TENTHS,0,0,P_EDGE_THRESHOLD);
+ PF_ADD_FLOAT_SLIDERX("Invert Threshold",0,100,0,100,50,PF_Precision_INTEGER,0,0,P_INVERT_THRESHOLD);
+ PF_ADD_FLOAT_SLIDERX("Smooth Shading",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_SMOOTH_SHADING);
+ PF_ADD_FLOAT_SLIDERX("Blend With Original",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_BLEND_ORIGINAL);
+ PF_ADD_FLOAT_SLIDERX("Random Color Amount",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_RANDOM_COLOR_AMOUNT);
+ PF_ADD_FLOAT_SLIDERX("X Flip Threshold",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_X_FLIP_THRESHOLD);
+ PF_ADD_CHECKBOXX("Preserve Cell Alpha",1,0,P_PRESERVE_ALPHA);
  PF_ADD_POPUPX("Input Transfer",3,1,"Linear|Rec.709|sRGB",0,P_TRANSFER);
  PF_ADD_CHECKBOXX("Reverse Order",0,0,P_REVERSE_ORDER);
  PF_ADD_POPUPX("Uniform Luma",3,1,"Use Preset|Off|On",0,P_UNIFORM_LUMA);
@@ -138,6 +145,13 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_MAPPING_MODE,[&](PF_ParamDef& p){state->ascii.mappingMode=(xao::AsciiMappingMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
  read(P_GAMMA,[&](PF_ParamDef& p){state->ascii.gamma=(float)p.u.fs_d.value;});
  read(P_CHANNEL_MODE,[&](PF_ParamDef& p){state->ascii.channelMode=(xao::AsciiChannelMode)std::clamp<A_long>(p.u.pd.value-1,0,3);});
+ read(P_EDGE_THRESHOLD,[&](PF_ParamDef& p){state->ascii.edgeThreshold=(float)p.u.fs_d.value;});
+ read(P_INVERT_THRESHOLD,[&](PF_ParamDef& p){state->ascii.invertThreshold=(float)p.u.fs_d.value;});
+ read(P_SMOOTH_SHADING,[&](PF_ParamDef& p){state->ascii.smoothShading=(float)p.u.fs_d.value;});
+ read(P_BLEND_ORIGINAL,[&](PF_ParamDef& p){state->ascii.blendWithOriginal=(float)p.u.fs_d.value;});
+ read(P_RANDOM_COLOR_AMOUNT,[&](PF_ParamDef& p){state->ascii.randomColorAmount=(float)p.u.fs_d.value;});
+ read(P_X_FLIP_THRESHOLD,[&](PF_ParamDef& p){state->ascii.xFlipThreshold=(float)p.u.fs_d.value;});
+ read(P_PRESERVE_ALPHA,[&](PF_ParamDef& p){state->ascii.preserveCellAlpha=p.u.bd.value!=0;});
  read(P_TRANSFER,[&](PF_ParamDef& p){state->transfer=p.u.pd.value;});
  read(P_REVERSE_ORDER,[&](PF_ParamDef& p){state->ascii.reverseOrder=p.u.bd.value!=0;});
  read(P_UNIFORM_LUMA,[&](PF_ParamDef& p){if(p.u.pd.value==2)state->ascii.uniformLuma=false;else if(p.u.pd.value==3)state->ascii.uniformLuma=true;});
