@@ -1,5 +1,9 @@
 name: XAO Core CI
 
+concurrency:
+  group: xao-core-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
