@@ -126,7 +126,18 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(params_.randomTiming)slot+=hash32(params_.randomSeed^ci)%(1u+(std::uint32_t)(clampf(params_.randomTimingVariation,0,10)*12));
   std::uint32_t rv=hash32(params_.randomSeed^hash32(ci+0x9e3779b9u)^hash32(slot));
   const bool shapeMatch=params_.mappingMode==AsciiMappingMode::ShapeMatch||(params_.mappingMode==AsciiMappingMode::Auto&&params_.shapeMatch);
-  auto* glyph=selectGlyph(candidates,target,shapeMatch,(params_.randomCharacters||params_.randomWords)?params_.randomAmount:0,rv);if(!glyph)continue;
+  const GlyphBitmap* glyph=nullptr;
+  if(params_.mappingMode==AsciiMappingMode::EdgeDirectional){
+   float gx=0.0f,gy=0.0f;
+   for(int sy=1;sy<7;++sy)for(int sx=1;sx<7;++sx){gx+=target[(std::size_t)sy*8+(sx+1)]-target[(std::size_t)sy*8+(sx-1)];gy+=target[(std::size_t)(sy+1)*8+sx]-target[(std::size_t)(sy-1)*8+sx];}
+   char32_t direction;
+   if(std::fabs(gx)>1.5f*std::fabs(gy))direction=U'-';
+   else if(std::fabs(gy)>1.5f*std::fabs(gx))direction=U'|';
+   else direction=(gx*gy>=0.0f)?U'\\':U'/';
+   for(const auto* candidate:candidates)if(candidate->codepoint==direction){glyph=candidate;break;}
+  }
+  if(!glyph)glyph=selectGlyph(candidates,target,shapeMatch,(params_.randomCharacters||params_.randomWords)?params_.randomAmount:0,rv);
+  if(!glyph)continue;
   float cw=(float)(x1-x0),ch=(float)(y1-y0),aw=cw*(1-cellMargin),ah=ch*(1-cellMargin);
   float numberScale=glyph->numberToken?clampf(params_.numberSize/100.0f,.1f,2.0f):1.0f;
   float dw=std::max(1.0f,aw*glyphScale*numberScale*(1-charMargin)),dh=std::max(1.0f,ah*glyphScale*numberScale*(1-charMargin));
