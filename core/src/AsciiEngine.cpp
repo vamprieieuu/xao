@@ -258,55 +258,17 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   }
  }
  if(params_.visualStyle==AsciiVisualStyle::Threshold){
-  for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)={0,0,0,0};
-  const int rowStep=std::clamp(params_.thresholdRowSpacing,2,64),segment=std::clamp(params_.thresholdSegmentWidth,4,512);
-  const int barHeight=std::max(1,rowStep/3);const float threshold=clamp01(params_.thresholdLevel*0.55f);
-  for(int y=0;y<h;y+=rowStep)for(int x=0;x<w;x+=segment){
+  for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)=scaled(src.at(x,y),0.18f);
+  const int rowStep=std::clamp(params_.thresholdRowSpacing,3,48),segment=std::clamp(params_.thresholdSegmentWidth,8,512);
+  const int barHeight=std::max(1,rowStep/3);const float phase=(float)ctx.timeSeconds*1.7f;
+  for(int y=0,row=0;y<h;y+=rowStep,++row)for(int x=0,col=0;x<w;x+=segment,++col){
    const int xEnd=std::min(w,x+segment);float lum=0.0f;Pixel color{0,0,0,0};int count=0;
    for(int sy=y;sy<std::min(h,y+rowStep);++sy)for(int sx=x;sx<xEnd;++sx){const Pixel& q=src.at(sx,sy);lum+=sampleChannel(q,AsciiChannelMode::Luma);color.r+=q.r;color.g+=q.g;color.b+=q.b;color.a+=q.a;++count;}
-   if(!count)continue;const float l=lum/(float)count;if(l<threshold)continue;
-   const int length=std::max(1,(int)std::lround((float)(xEnd-x)*clamp01((l-threshold*0.35f)/std::max(0.001f,1.0f-threshold*0.35f))));
+   if(!count)continue;const float l=clamp01(lum/(float)count);const int length=std::max(1,(int)std::lround((float)(xEnd-x)*(0.16f+0.84f*l)));
+   const int shift=(int)(hash32(params_.randomSeed^(std::uint32_t)row*0x9E3779B9u^(std::uint32_t)col*0x85EBCA6Bu)%std::max(1,segment/3));
    const float inv=1.0f/(float)count;color.r*=inv;color.g*=inv;color.b*=inv;color.a*=inv;
-   for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=x;xx<std::min(x+length,w);++xx)dst.at(xx,yy)=color;
-  }
- }
- if(params_.visualStyle==AsciiVisualStyle::CGO&&!glowMask.empty()){
-  for(int y=1;y<h-1;++y)for(int x=1;x<w-1;++x){
-   auto lumAt=[&](int sx,int sy){return sampleChannel(src.at(sx,sy),AsciiChannelMode::Luma);};
-   const float gx=(lumAt(x+1,y-1)+2.0f*lumAt(x+1,y)+lumAt(x+1,y+1))-(lumAt(x-1,y-1)+2.0f*lumAt(x-1,y)+lumAt(x-1,y+1));
-   const float gy=(lumAt(x-1,y+1)+2.0f*lumAt(x,y+1)+lumAt(x+1,y+1))-(lumAt(x-1,y-1)+2.0f*lumAt(x,y-1)+lumAt(x+1,y-1));
-   const float edge=clamp01(std::sqrt(gx*gx+gy*gy)*0.9f);
-   glowMask[(std::size_t)y*w+x]=std::max(glowMask[(std::size_t)y*w+x],edge*0.55f);
-  }
- }
- if((params_.glowEnabled||styleGlow)&&!glowMask.empty()){
-  const int radius=std::clamp((int)std::lround(params_.glowRadius),0,64);
-  blurGlowMask(glowMask,glowTemp,w,h,radius);
-  const float intensity=clampf(params_.glowIntensity,0,5),ga=clamp01(params_.glowColor.a);
-  for(int y=0;y<h;++y)for(int x=0;x<w;++x){const float amount=clamp01(glowMask[(std::size_t)y*w+x]*intensity)*ga;if(amount<=1e-6f)continue;Pixel& p=dst.row(y)[x];p.r+=params_.glowColor.r*amount;p.g+=params_.glowColor.g*amount;p.b+=params_.glowColor.b*amount;p.a=std::max(p.a,amount);}
- }
- const bool styleRays=params_.visualStyle==AsciiVisualStyle::Ghost;
- if(params_.raysEnabled||styleRays){
-  constexpr float pi=3.14159265358979323846f;
-  const float originX=clampf(params_.raysOriginX,0,1),originY=clampf(params_.raysOriginY,0,1);
-  const float spread=clampf(params_.raysSpread,1,360)*pi/180.0f;
-  const float angleOffset=params_.raysAngle*pi/180.0f;
-  const float rayCount=clampf(params_.raysCount,1,64);
-  const float sharpness=clampf(params_.raysSharpness,1,20);
-  const float length=clampf(params_.raysLength,0.01f,2.0f);
-  const float intensity=clampf(params_.raysIntensity,0,5)*(styleRays?0.65f:1.0f),colorAlpha=clamp01(params_.raysColor.a);
-  const float aspectX=(float)w/(float)std::max(w,h),aspectY=(float)h/(float)std::max(w,h);
-  for(int y=0;y<h;++y)for(int x=0;x<w;++x){
-   const float dx=((x+0.5f)/(float)w-originX)*aspectX,dy=((y+0.5f)/(float)h-originY)*aspectY;
-   const float distance=std::sqrt(dx*dx+dy*dy);
-   if(distance>=length)continue;
-   float angle=std::remainder(std::atan2(dy,dx)-angleOffset,2.0f*pi);
-   if(spread<2.0f*pi-1e-4f&&std::fabs(angle)>spread*0.5f)continue;
-   const float spoke=std::pow(std::max(0.0f,std::cos(angle*rayCount)),sharpness);
-   const float radial=clamp01(1.0f-distance/length);
-   const float amount=clamp01(spoke*radial*intensity)*colorAlpha;
-   if(amount<=1e-6f)continue;
-   Pixel& p=dst.row(y)[x];p.r+=params_.raysColor.r*amount;p.g+=params_.raysColor.g*amount;p.b+=params_.raysColor.b*amount;p.a=std::max(p.a,amount);
+   const float alpha=clamp01(color.a)*(0.42f+0.58f*l);const int sx0=std::min(w-1,x+((int)phase+shift)%(std::max(1,segment/3)));
+   for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=sx0;xx<std::min(w,sx0+length);++xx){Pixel bar=scaled(color,alpha);Pixel& d=dst.at(xx,yy);const float invA=1.0f-bar.a;d={bar.r+d.r*invA,bar.g+d.g*invA,bar.b+d.b*invA,bar.a+d.a*invA};}
   }
  }
 }
