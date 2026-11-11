@@ -49,6 +49,8 @@ struct AsciiParams {
  AsciiPresetId preset=AsciiPresetId::Default;
  AsciiCharacterSetId characterSet=AsciiCharacterSetId::CratesSpecialLetters;
  bool invert=false;
+ bool reverseOrder=false;
+ bool uniformLuma=false;
  bool colorize=true;
  bool preserveCellAlpha=true;
  bool antiAliasing=true;

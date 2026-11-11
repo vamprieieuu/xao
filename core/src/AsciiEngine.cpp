@@ -7,16 +7,16 @@
 namespace xao {
 namespace {
 constexpr CratesPresetDefinition kPresets[] = {
- {AsciiPresetId::Default,"Default",0,35,0,0,true,false,0,{0.9921568632f,0.9882352948f,0.9882352948f,1},0.50f,0,0,5,10,0,0},
- {AsciiPresetId::AlienSignal,"Alien Signal",13,70,0,0,true,false,100,{0.8705882430f,1,0,1},0.50f,0,0,5,10,25,50},
- {AsciiPresetId::CirclesAndDots,"Circles and Dots",7,25,100,15,true,false,0,{1,1,1,1},0.50f,0,0,15,10,0,0},
- {AsciiPresetId::Classic,"Classic",1,25,8,0,true,false,100,{0.9921568632f,0.9882352948f,0.9882352948f,1},0.50f,0,0,5,10,0,0},
- {AsciiPresetId::Corrupted,"Corrupted",1,50,0,0,true,true,0,{1,1,1,1},0.25f,0,200,15,25,25,50},
- {AsciiPresetId::Crossword,"Crossword",2,50,13,0,true,true,100,{0.9921568632f,0.9882352948f,0.9882352948f,1},0,50,0,0,10,0,0},
- {AsciiPresetId::Diamonds,"Diamond",9,35,120,0,true,false,0,{1,1,1,1},0.50f,5,0,15,10,0,0},
- {AsciiPresetId::Matrix,"Matrix",4,25,0,0,true,false,100,{0,1,0.2352941185f,1},0.50f,0,0,30,50,0,0},
- {AsciiPresetId::Motherboard,"Motherboard",11,65,0,0,true,false,0,{0.9921568632f,0.9882352948f,0.9882352948f,1},0,0,0,25,100,15,50},
- {AsciiPresetId::PinkShapes,"Pink Shapes",5,35,95,0,true,false,100,{1,0.4156862795f,0.7333333492f,1},0.50f,0,0,15,10,0,0}
+ {AsciiPresetId::Default,"Default",0,35,0,0,true,false,false,false,0,{0.9921568632f,0.9882352948f,0.9882352948f,1},0.50f,0,0,5,10,0,0},
+ {AsciiPresetId::AlienSignal,"Alien Signal",13,70,0,0,true,false,false,false,100,{0.8705882430f,1,0,1},0.50f,0,0,5,10,25,50},
+ {AsciiPresetId::CirclesAndDots,"Circles and Dots",7,25,100,15,true,false,false,true,0,{1,1,1,1},0.50f,0,0,15,10,0,0},
+ {AsciiPresetId::Classic,"Classic",1,25,8,0,true,false,false,false,100,{0.9921568632f,0.9882352948f,0.9882352948f,1},0.50f,0,0,5,10,0,0},
+ {AsciiPresetId::Corrupted,"Corrupted",1,50,0,0,true,true,false,false,0,{1,1,1,1},0.25f,0,200,15,25,25,50},
+ {AsciiPresetId::Crossword,"Crossword",2,50,13,0,true,true,false,false,100,{0.9921568632f,0.9882352948f,0.9882352948f,1},0,50,0,0,10,0,0},
+ {AsciiPresetId::Diamonds,"Diamond",9,35,120,0,true,false,false,true,0,{1,1,1,1},0.50f,5,0,15,10,0,0},
+ {AsciiPresetId::Matrix,"Matrix",4,25,0,0,true,false,false,false,100,{0,1,0.2352941185f,1},0.50f,0,0,30,50,0,0},
+ {AsciiPresetId::Motherboard,"Motherboard",11,65,0,0,true,false,false,false,0,{0.9921568632f,0.9882352948f,0.9882352948f,1},0,0,0,25,100,15,50},
+ {AsciiPresetId::PinkShapes,"Pink Shapes",5,35,95,0,true,false,false,true,100,{1,0.4156862795f,0.7333333492f,1},0.50f,0,0,15,10,0,0}
 };
 constexpr char32_t k0[]=U"@#%&$ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
 constexpr char32_t k1[]=U"@#%&$0123456789";
@@ -73,7 +73,7 @@ const GlyphBitmap* selectGlyph(const std::vector<const GlyphBitmap*>& candidates
   else score=densityBest[i].value;
   std::size_t pos=shapeCount;while(pos>0&&shapeBest[pos-1].value>score){shapeBest[pos]=shapeBest[pos-1];--pos;}shapeBest[pos]={g,score};++shapeCount;
  }
- const std::size_t pool=std::min(shapeCount,(std::size_t)(1+std::lround(clamp01(amount)*7.0f)));
+ const std::size_t pool=std::min(shapeCount,(std::size_t)(1+std::lround(clamp01(amount)*15.0f)));
  return shapeBest[(std::size_t)random%pool].glyph;
 }
 Pixel scaled(Pixel p,float k) noexcept{p.r*=k;p.g*=k;p.b*=k;p.a*=k;return p;}
@@ -90,7 +90,7 @@ std::u32string_view asciiCharacterSetCodepoints(AsciiCharacterSetId id) noexcept
 }
 std::shared_ptr<const GlyphAtlas> builtinAsciiGlyphAtlas(){static const auto a=makeBuiltin();return a;}
 void applyCratesPreset(AsciiParams& p,AsciiPresetId id) noexcept{
- const auto& v=cratesPreset(id);p.preset=id;p.characterSize=v.characterSize;p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=v.randomShuffle>0;p.randomTiming=v.randomSpeed>0;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);
+ const auto& v=cratesPreset(id);p.preset=id;p.characterSize=v.characterSize;p.characterMargin=v.characterMargin;p.cellMargin=v.cellMargin;p.antiAliasing=v.antiAliasing;p.invert=v.invert;p.reverseOrder=v.reverseOrder;p.uniformLuma=v.uniformLuma;p.paper={0,0,0,1};p.tintStrength=v.tintStrength;p.tintColor=v.tintColor;p.invertThreshold=v.invertThreshold;p.smoothShading=v.smoothShading;p.blendWithOriginal=v.blendWithOriginal;p.randomAmount=v.randomShuffle/100.0f;p.randomSpeed=v.randomSpeed/100.0f;p.randomColorAmount=v.randomColorAmount/100.0f;p.xFlipThreshold=v.xFlipThreshold/100.0f;p.randomCharacters=v.randomShuffle>0;p.randomTiming=v.randomSpeed>0;p.characterSet=(AsciiCharacterSetId)std::min<std::uint8_t>(v.cratesCharacterSet,14);
  p.enableAncient=p.enableEnglish=p.enableArabic=false;
 }
 void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) const{
@@ -108,7 +108,9 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   int x1=std::min(w,x0+cell),y1=std::min(h,y0+cell);std::array<float,64> target{};Pixel avg{0,0,0,0};double alphaSum=0;int n=0;
   for(int sy=0;sy<8;++sy)for(int sx=0;sx<8;++sx){int px=std::min(x1-1,x0+(int)((sx+.5f)*(x1-x0)/8.0f)),py=std::min(y1-1,y0+(int)((sy+.5f)*(y1-y0)/8.0f));const Pixel& p=src.row(py)[px];float a=clamp01(p.a);target[(std::size_t)sy*8+sx]=clamp01((1-lum(p))*a);avg.r+=p.r;avg.g+=p.g;avg.b+=p.b;avg.a+=p.a;alphaSum+=a;++n;}
   float inv=1.0f/n;avg.r*=inv;avg.g*=inv;avg.b*=inv;avg.a*=inv;float mean=0;for(float v:target)mean+=v;mean/=64;
-  if(params_.invert)for(float& v:target)v=1-v;
+  if(params_.uniformLuma)for(float& v:target)v=mean;
+  if(params_.reverseOrder)for(float& v:target)v=1-v;
+  if(params_.invert)for(float& v:target)if(v>=clamp01(params_.invertThreshold/100.0f))v=1-v;
   for(float& v:target){v=clamp01((v-.5f)*contrast+.5f+brightness);if(params_.smoothShading>0){float sm=v*v*(3-2*v);v=v*(1-clamp01(params_.smoothShading/100.0f))+sm*clamp01(params_.smoothShading/100.0f);}}
   std::uint32_t ci=(std::uint32_t)((y0/cell)*((w+cell-1)/cell)+(x0/cell));double time=std::max(0.0,ctx.timeSeconds);
   bool animate=params_.randomCharacters||params_.randomWords;
@@ -121,7 +123,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   float dw=std::max(1.0f,aw*glyphScale*numberScale*(1-charMargin)),dh=std::max(1.0f,ah*glyphScale*numberScale*(1-charMargin));
   float left=(x0+x1-dw)*.5f,top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
   Pixel fg=params_.colorize?avg:params_.ink;if(params_.colorize&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
-  if(params_.tintStrength>0){float s=clamp01(params_.tintStrength/100.0f);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
+  if(params_.tintStrength>0||params_.randomColorAmount>0){float randomTint=(hash32(rv^0xC010A5u)/(float)0xFFFFFFFFu)*clamp01(params_.randomColorAmount/100.0f);float s=clamp01(params_.tintStrength/100.0f+randomTint);float tr=srgbToLinear(clamp01(params_.tintColor.r)),tg=srgbToLinear(clamp01(params_.tintColor.g)),tb=srgbToLinear(clamp01(params_.tintColor.b));fg.r=fg.r*(1-s)+tr*s;fg.g=fg.g*(1-s)+tg*s;fg.b=fg.b*(1-s)+tb*s;}
   fg=scaled(fg,alpha);Pixel bg=params_.preserveCellAlpha?scaled(params_.paper,alpha):params_.paper;
   bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
   for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<x1;++x){float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;float c=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0;c=clamp01(c);Pixel r{fg.r*c+bg.r*(1-c),fg.g*c+bg.g*(1-c),fg.b*c+bg.b*(1-c),fg.a*c+bg.a*(1-c)};if(params_.blendWithOriginal>0){const Pixel& o=src.row(y)[x];float m=clamp01(params_.blendWithOriginal/100.0f);r.r=r.r*(1-m)+o.r*m;r.g=r.g*(1-m)+o.g*m;r.b=r.b*(1-m)+o.b*m;r.a=r.a*(1-m)+o.a*m;}out[x]=r;}}

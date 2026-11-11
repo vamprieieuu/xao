@@ -95,7 +95,7 @@ def verify(aex_path: Path, pipl_path: Path) -> int:
     resource_data = data[start:end]
     if pipl not in resource_data:
         return fail("The exact generated XAO PiPL payload is not embedded in .rsrc")
-    if b"MIB8dnik" not in resource_data or b"XAO" not in resource_data:
+    if b"MIB8dnik" not in resource_data or b"XAO_ASCII" not in resource_data:
         return fail("XAO PiPL signature or match name is missing from .rsrc")
     if b"YMDithers" in resource_data:
         return fail("MAJEED/YMDithers identity leaked into XAO resources")
@@ -133,6 +133,6 @@ def verify(aex_path: Path, pipl_path: Path) -> int:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("usage: verify_aex.py <XAO.aex> <XAOAsciiPiPL.bin>", file=sys.stderr)
+        print("usage: verify_aex.py <XAO_ASCII.aex> <XAOAsciiPiPL.bin>", file=sys.stderr)
         raise SystemExit(2)
     raise SystemExit(verify(Path(sys.argv[1]), Path(sys.argv[2])))

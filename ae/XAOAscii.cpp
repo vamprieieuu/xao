@@ -27,7 +27,7 @@ enum {
  P_ANCIENT_LETTERS,P_ANCIENT_NUMBERS,P_ANCIENT_WORDS,
  P_ENGLISH_LETTERS,P_ENGLISH_NUMBERS,P_ENGLISH_WORDS,
  P_ARABIC_LETTERS,P_ARABIC_NUMBERS,P_ARABIC_WORDS,
- P_FONT,P_TRANSFER,P_COUNT
+ P_FONT,P_TRANSFER,P_REVERSE_ORDER,P_UNIFORM_LUMA,P_COUNT
 };
 enum { T_LINEAR=1,T_REC709=2,T_SRGB=3 };
 struct State { xao::AsciiParams ascii; A_long transfer=T_LINEAR; };
@@ -84,6 +84,8 @@ PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ADD_CHECKBOXX("Arabic Words",0,0,P_ARABIC_WORDS);
  PF_ADD_POPUPX("Font Family",12,1,"Segoe UI Symbol|Consolas|IBM Plex Mono|VT323|Space Mono|Press Start 2P|Share Tech Mono|Courier Prime|IBM VGA|IBM EGA|Verite|DG One Bold",0,P_FONT);
  PF_ADD_POPUPX("Input Transfer",3,1,"Linear|Rec.709|sRGB",0,P_TRANSFER);
+ PF_ADD_CHECKBOXX("Reverse Order",0,0,P_REVERSE_ORDER);
+ PF_ADD_POPUPX("Uniform Luma",3,1,"Use Preset|Off|On",0,P_UNIFORM_LUMA);
  out->num_params=P_COUNT;return PF_Err_NONE;
 }
 
@@ -128,6 +130,8 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  A_long fontIndex=1;
  read(P_FONT,[&](PF_ParamDef& p){fontIndex=p.u.pd.value;});
  read(P_TRANSFER,[&](PF_ParamDef& p){state->transfer=p.u.pd.value;});
+ read(P_REVERSE_ORDER,[&](PF_ParamDef& p){state->ascii.reverseOrder=p.u.bd.value!=0;});
+ read(P_UNIFORM_LUMA,[&](PF_ParamDef& p){if(p.u.pd.value==2)state->ascii.uniformLuma=false;else if(p.u.pd.value==3)state->ascii.uniformLuma=true;});
  if(err!=PF_Err_NONE){delete state;return err;}
  static const wchar_t* fontNames[]={L"Segoe UI Symbol",L"Consolas",L"IBM Plex Mono",L"VT323",L"Space Mono",L"Press Start 2P",L"Share Tech Mono",L"Courier Prime",L"IBM VGA",L"IBM EGA",L"Verite",L"DG One Bold"};
  fontIndex=std::clamp<A_long>(fontIndex,1,12);

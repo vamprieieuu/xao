@@ -34,8 +34,8 @@ jobs:
    - name: Verify AEX
      shell: pwsh
      run: |
-      $aex = Get-ChildItem build -Filter "XAO.aex" -Recurse -File | Select-Object -First 1
-      if (-not $aex) { throw "XAO.aex was not produced." }
+      $aex = Get-ChildItem build -Filter "XAO_ASCII.aex" -Recurse -File | Select-Object -First 1
+      if (-not $aex) { throw "XAO_ASCII.aex was not produced." }
       $hash = (Get-FileHash $aex.FullName -Algorithm SHA256).Hash
       Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("AEX {0}; Bytes {1}; SHA256 {2}" -f $aex.FullName,$aex.Length,$hash)
       $exports = dumpbin /exports $aex.FullName | Out-String
@@ -52,7 +52,7 @@ jobs:
       body: Automated XAO native After Effects plugin build. The release asset is the raw .aex file (not a ZIP archive).
       prerelease: true
       draft: false
-      files: build/bin/Release/XAO.aex
+      files: build/bin/Release/XAO_ASCII.aex
       fail_on_unmatched_files: true
    - name: Publish direct download link
      if: success()
@@ -61,6 +61,6 @@ jobs:
       RELEASE_TAG: xao-build-${{ github.run_number }}
       REPOSITORY: ${{ github.repository }}
      run: |
-      $downloadUrl = "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_TAG/XAO.aex"
+      $downloadUrl = "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_TAG/XAO_ASCII.aex"
       Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## XAO plugin"
-      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Download XAO.aex]($downloadUrl)"
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Download XAO_ASCII.aex]($downloadUrl)"
