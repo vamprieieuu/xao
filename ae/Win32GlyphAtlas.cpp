@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <usp10.h>
 #include <utility>
 #include <algorithm>
 #include <cstring>
@@ -34,6 +35,20 @@ void addText(std::vector<Token>& out,std::set<std::wstring>& seen,std::u32string
 void addWords(std::vector<Token>& out,const std::u32string& alphabet,std::uint32_t seed,bool rtl){
  if(alphabet.empty())return;std::mt19937 rng(seed);std::uniform_int_distribution<int> len(2,6);std::uniform_int_distribution<std::size_t> pick(0,alphabet.size()-1);
  for(int n=0;n<64;++n){std::wstring word;int count=len(rng);for(int i=0;i<count;++i)word+=toWide(alphabet[pick(rng)]);out.push_back({std::move(word),0,true,false,rtl,false});}
+}
+HRESULT drawShapedText(HDC dc,const Token& token){
+ if(token.text.empty())return E_INVALIDARG;
+ SCRIPT_STRING_ANALYSIS analysis=nullptr;
+ DWORD flags=SSA_GLYPHS|SSA_FALLBACK|SSA_LINK;
+ if(token.rtl)flags|=SSA_RTL;
+ HRESULT hr=ScriptStringAnalyse(dc,token.text.c_str(),(int)token.text.size(),0,-1,flags,kAtlasW,nullptr,nullptr,nullptr,nullptr,nullptr,&analysis);
+ if(FAILED(hr))return hr;
+ const SIZE* extent=ScriptString_pSize(analysis);
+ int x=extent?std::max(0,(kAtlasW-extent->cx)/2):0;
+ int y=extent?std::max(0,(kAtlasH-extent->cy)/2):0;
+ hr=ScriptStringOut(analysis,x,y,0,nullptr,0,-1,FALSE);
+ ScriptStringFree(&analysis);
+ return hr;
 }
 bool hasGlyph(HDC dc,const std::wstring& text){
  if(text.empty())return false;std::vector<WORD> glyphs(text.size());DWORD result=GetGlyphIndicesW(dc,text.c_str(),(int)text.size(),glyphs.data(),GGI_MARK_NONEXISTING_GLYPHS);
@@ -83,8 +98,8 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring&
   HFONT chosen=nullptr;HGDIOBJ oldFont=nullptr;bool found=false;int height=token.word?-10:-19;
   for(const auto& face:fallbacks){if(face.empty())continue;HFONT f=CreateFontW(height,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_TT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH|FF_DONTCARE,face.c_str());if(!f)continue;HGDIOBJ prior=SelectObject(dc,f);if(hasGlyph(dc,token.text)){chosen=f;oldFont=prior;found=true;break;}SelectObject(dc,prior);DeleteObject(f);}
   if(!found)continue;
-  std::memset(bits,0,kAtlasW*kAtlasH*4);RECT rect{0,0,kAtlasW,kAtlasH};UINT flags=DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX;if(token.rtl)flags|=DT_RTLREADING;
-  DrawTextW(dc,token.text.c_str(),(int)token.text.size(),&rect,flags);
+  std::memset(bits,0,kAtlasW*kAtlasH*4);
+  if(FAILED(drawShapedText(dc,token))){SelectObject(dc,oldFont);DeleteObject(chosen);continue;}
   GlyphBitmap g;g.codepoint=token.codepoint;g.wordToken=token.word;g.numberToken=token.number;g.width=kAtlasW;g.height=kAtlasH;g.coverage.resize(kAtlasW*kAtlasH);const auto* px=(const std::uint8_t*)bits;std::uint64_t sum=0;
   for(int i=0;i<kAtlasW*kAtlasH;++i){std::uint8_t v=px[i*4+2];g.coverage[(std::size_t)i]=v;sum+=v;}g.density=(float)sum/(255.0f*kAtlasW*kAtlasH);if(sum){if(token.s1Atlas)s1Glyphs.push_back(std::move(g));else atlas->glyphs.push_back(std::move(g));}
   SelectObject(dc,oldFont);DeleteObject(chosen);
