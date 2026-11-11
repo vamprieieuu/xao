@@ -61,15 +61,18 @@ std::wstring makeKey(const AsciiParams& p,const std::wstring& family){
 }
 std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p,const std::wstring& family){
  std::vector<Token> tokens;std::set<std::wstring> seen;
- const bool s1Latin=p.characterSet==AsciiCharacterSetId::S1Classic||p.characterSet==AsciiCharacterSetId::S1Minimal||p.characterSet==AsciiCharacterSetId::S1Detailed||p.characterSet==AsciiCharacterSetId::S1Bourke;
- addText(tokens,seen,asciiCharacterSetCodepoints(p.characterSet),s1Latin);
- switch(p.characterSet){
-  case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF);break;
-  case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6);break;
-  case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F);break;
-  case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F);break;
-  case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F);break;
-  default:break;
+ const bool familyMode=p.enableAncient||p.enableEnglish||p.enableArabic;
+ if(!familyMode){
+  const bool s1Latin=p.characterSet==AsciiCharacterSetId::S1Classic||p.characterSet==AsciiCharacterSetId::S1Minimal||p.characterSet==AsciiCharacterSetId::S1Detailed||p.characterSet==AsciiCharacterSetId::S1Bourke;
+  addText(tokens,seen,asciiCharacterSetCodepoints(p.characterSet),s1Latin);
+  switch(p.characterSet){
+   case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF);break;
+   case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6);break;
+   case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F);break;
+   case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F);break;
+   case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F);break;
+   default:break;
+  }
  }
  const std::u32string ancientLetters=U"ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψωᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
  const std::u32string englishLetters=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
