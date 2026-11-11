@@ -128,7 +128,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
   switch(state->ascii.visualStyle){
    case xao::AsciiVisualStyle::CGO:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.55f;break;
    case xao::AsciiVisualStyle::Ghost:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.75f;state->ascii.colorize=true;break;
-   case xao::AsciiVisualStyle::Liquid:state->ascii.layoutMode=xao::AsciiLayoutMode::LiquidPanels;state->ascii.randomWords=true;state->ascii.randomCharacters=true;state->ascii.randomAmount=0.65f;break;
+   case xao::AsciiVisualStyle::Liquid:state->ascii.layoutMode=xao::AsciiLayoutMode::LiquidPanels;state->ascii.characterSet=xao::AsciiCharacterSetId::CratesJapanese;state->ascii.randomWords=false;state->ascii.randomCharacters=true;state->ascii.randomAmount=0.65f;break;
    case xao::AsciiVisualStyle::Mosaic:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.35f;break;
    case xao::AsciiVisualStyle::Rainbow:state->ascii.randomCharacters=true;state->ascii.randomAmount=0.45f;break;
    case xao::AsciiVisualStyle::Threshold:state->ascii.thresholdLevel=0.08f;state->ascii.thresholdSegmentWidth=32;state->ascii.thresholdRowSpacing=8;break;
