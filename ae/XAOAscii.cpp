@@ -27,7 +27,7 @@ enum {
  P_ANCIENT_LETTERS,P_ANCIENT_NUMBERS,P_ANCIENT_WORDS,
  P_ENGLISH_LETTERS,P_ENGLISH_NUMBERS,P_ENGLISH_WORDS,
  P_ARABIC_LETTERS,P_ARABIC_NUMBERS,P_ARABIC_WORDS,
- P_FONT,P_MAPPING_MODE,P_GAMMA,P_CHANNEL_MODE,P_EDGE_THRESHOLD,
+ P_FONT,P_MAPPING_MODE,P_GAMMA,P_CHANNEL_MODE,P_LAYOUT_MODE,P_PANEL_MIN_WIDTH,P_PANEL_MAX_WIDTH,P_PANEL_MIN_HEIGHT,P_PANEL_MAX_HEIGHT,P_EDGE_THRESHOLD,
  P_GLOW_ENABLE,P_GLOW_SELECTION,P_GLOW_FILTER,P_GLOW_AMOUNT,P_GLOW_RADIUS,P_GLOW_INTENSITY,P_GLOW_X,P_GLOW_Y,P_GLOW_REGION,
  P_RAYS_ENABLE,P_RAYS_COUNT,P_RAYS_ANGLE,P_RAYS_SPREAD,P_RAYS_LENGTH,P_RAYS_INTENSITY,P_RAYS_SHARPNESS,P_RAYS_X,P_RAYS_Y,
  P_OVERRIDE_PRESET,P_INVERT_THRESHOLD,P_SMOOTH_SHADING,P_BLEND_ORIGINAL,P_RANDOM_COLOR_AMOUNT,P_X_FLIP_THRESHOLD,P_PRESERVE_ALPHA,
@@ -62,6 +62,11 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_POPUPX("Plugin Presets",10,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes",0,P_PRESET);
  PF_ADD_POPUPX("Character Set",28,1,"Use Preset|Crates: Special Characters and Letters|Crates: Special Characters and Numbers|Crates: Classic Typewriter|Crates: Japanese Characters|Crates: Binary|Crates: Minimal Punk|Crates: X's|Crates: Bubble Growth|Crates: Stars|Crates: Diamonds|Crates: Dots|Crates: Circuits 1|Crates: Circuits 2|Crates: Alien Font|Crates: Bars|S1: Classic|S1: Minimal|S1: Detailed|S1: Bourke|S1: Braille|S1: Katakana|S1: Blocks|S1: Quadrants|S1: Box Drawing|ASCII Art Main: Standard|ASCII Art Main: Simple|ASCII Art Main: Detailed",0,P_CHARSET);
+ PF_ADD_POPUPX("Layout Mode",2,1,"Grid|Liquid Panels",0,P_LAYOUT_MODE);
+ PF_ADD_FLOAT_SLIDERX("Panel Width Min",1,8,1,8,1,PF_Precision_INTEGER,0,0,P_PANEL_MIN_WIDTH);
+ PF_ADD_FLOAT_SLIDERX("Panel Width Max",1,8,1,8,3,PF_Precision_INTEGER,0,0,P_PANEL_MAX_WIDTH);
+ PF_ADD_FLOAT_SLIDERX("Panel Height Min",1,8,1,8,1,PF_Precision_INTEGER,0,0,P_PANEL_MIN_HEIGHT);
+ PF_ADD_FLOAT_SLIDERX("Panel Height Max",1,8,1,8,3,PF_Precision_INTEGER,0,0,P_PANEL_MAX_HEIGHT);
  PF_ADD_FLOAT_SLIDERX("Cell Size",2,128,2,64,12,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("Glyph Scale",0.1,1.5,0.1,1.5,0.88,PF_Precision_TENTHS,0,0,P_SCALE);
  PF_ADD_FLOAT_SLIDERX("Character Size",10,200,10,200,100,PF_Precision_INTEGER,0,0,P_CHAR_SIZE);
@@ -133,6 +138,11 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_PRESET,[&](PF_ParamDef& p){preset=p.u.pd.value;});
  preset=std::clamp<A_long>(preset,1,10);xao::applyCratesPreset(state->ascii,(xao::AsciiPresetId)(preset-1));
  read(P_CHARSET,[&](PF_ParamDef& p){if(p.u.pd.value>1)state->ascii.characterSet=(xao::AsciiCharacterSetId)std::clamp<A_long>(p.u.pd.value-2,0,(A_long)xao::AsciiCharacterSetId::Count-1);});
+ read(P_LAYOUT_MODE,[&](PF_ParamDef& p){state->ascii.layoutMode=(xao::AsciiLayoutMode)std::clamp<A_long>(p.u.pd.value-1,0,1);});
+ read(P_PANEL_MIN_WIDTH,[&](PF_ParamDef& p){state->ascii.panelMinWidth=(int)p.u.fs_d.value;});
+ read(P_PANEL_MAX_WIDTH,[&](PF_ParamDef& p){state->ascii.panelMaxWidth=(int)p.u.fs_d.value;});
+ read(P_PANEL_MIN_HEIGHT,[&](PF_ParamDef& p){state->ascii.panelMinHeight=(int)p.u.fs_d.value;});
+ read(P_PANEL_MAX_HEIGHT,[&](PF_ParamDef& p){state->ascii.panelMaxHeight=(int)p.u.fs_d.value;});
  read(P_CELL,[&](PF_ParamDef& p){state->ascii.cellSize=(int)p.u.fs_d.value;});
  read(P_SCALE,[&](PF_ParamDef& p){state->ascii.glyphScale=(float)p.u.fs_d.value;});
  read(P_CHAR_SIZE,[&](PF_ParamDef& p){state->ascii.characterSize*=std::clamp((float)p.u.fs_d.value/100.0f,0.1f,2.0f);});
