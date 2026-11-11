@@ -58,7 +58,7 @@ PF_Err Global(PF_OutData* o){o->my_version=PF_VERSION(1,1,0,PF_Stage_DEVELOP,1);
 PF_Err Params(PF_InData*,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
  PF_ADD_POPUPX("ASCII Preset",21,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch",0,P_PRESET);
- PF_ADD_POPUPX("Character Set",28,1,"Use Preset|Fantasy Marks|Dark Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed",0,P_CHARSET);
+ PF_ADD_POPUPX("Character Set",29,1,"Use Preset|Language Only|Fantasy Marks|Vampire Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed",0,P_CHARSET);
  PF_ADD_FLOAT_SLIDERX("ASCII Cells",2,512,2,512,12,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("ASCII Amount",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_AMOUNT);
  PF_ADD_FLOAT_SLIDERX("ASCII Fade",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_FADE);
@@ -140,7 +140,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
    default:break;
   }
  }
- read(P_CHARSET,[&](PF_ParamDef& p){if(p.u.pd.value>1)state->ascii.characterSet=(xao::AsciiCharacterSetId)std::clamp<A_long>(p.u.pd.value-2,0,(A_long)xao::AsciiCharacterSetId::Count-1);});
+ read(P_CHARSET,[&](PF_ParamDef& p){if(p.u.pd.value==2)state->ascii.characterSet=xao::AsciiCharacterSetId::Count;else if(p.u.pd.value>2)state->ascii.characterSet=(xao::AsciiCharacterSetId)std::clamp<A_long>(p.u.pd.value-3,0,(A_long)xao::AsciiCharacterSetId::Count-1);});
  read(P_CELL,[&](PF_ParamDef& p){state->ascii.cellSize=(int)p.u.fs_d.value;});
  read(P_AMOUNT,[&](PF_ParamDef& p){state->ascii.asciiAmount=(float)p.u.fs_d.value;});
  read(P_FADE,[&](PF_ParamDef& p){state->ascii.asciiFade=(float)p.u.fs_d.value;state->ascii.blendWithOriginal=std::clamp(state->ascii.blendWithOriginal+(float)p.u.fs_d.value,0.0f,100.0f);});
