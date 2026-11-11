@@ -185,8 +185,9 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   int drawX1=x1;float left=(x0+x1-dw)*.5f;
   if(params_.visualStyle==AsciiVisualStyle::Organic)left+=(float)((int)(rv%5)-2)*0.06f*cw;
   if(params_.visualStyle==AsciiVisualStyle::Glitch)left+=(float)((int)((rv>>8)%7)-3)*0.08f*cw;
-  if(glyph->wordToken){dh=std::max(1.0f,ah*glyphScale*clampf(params_.wordSize/100.0f,.25f,2.5f)*(1-charMargin));dw=std::max(cw,dh*glyphAspect);dw=std::min(dw,(float)(w-x0));drawX1=std::min(w,std::max(x1,x0+(int)std::ceil(dw)));left=(float)x0+charMargin*cw;}
+  if(glyph->wordToken){dh=std::max(1.0f,ah*glyphScale*tokenScale*(1-charMargin));dw=std::max(cw,dh*glyphAspect);dw=std::min(dw,(float)(w-x0));drawX1=std::min(w,std::max(x1,x0+(int)std::ceil(dw)));left=(float)x0+charMargin*cw;}
   float top=(y0+y1-dh)*.5f,alpha=params_.preserveCellAlpha?clamp01((float)(alphaSum/n)):1.0f;
+  bool flipX=(glyph->codepoint==U'X'||glyph->codepoint==U'x')&&mean>=clamp01(params_.xFlipThreshold);
   if(glyph->wordToken&&drawX1>x1){Pixel wa{0,0,0,0};int wn=0;for(int yy=y0;yy<y1;++yy)for(int xx=x0;xx<drawX1;++xx){const Pixel& q=src.row(yy)[xx];wa.r+=q.r;wa.g+=q.g;wa.b+=q.b;wa.a+=q.a;++wn;}if(wn){float wi=1.0f/(float)wn;avg={wa.r*wi,wa.g*wi,wa.b*wi,wa.a*wi};}}
   if(params_.visualStyle==AsciiVisualStyle::Photorealistic){const Pixel& center=src.at((x0+x1)/2,(y0+y1)/2);const float m=0.16f;avg.r=avg.r*(1-m)+center.r*m;avg.g=avg.g*(1-m)+center.g*m;avg.b=avg.b*(1-m)+center.b*m;}
   Pixel fg=(params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)?avg:params_.ink;if((params_.colorize||params_.visualStyle==AsciiVisualStyle::Ghost)&&fg.a>1e-8f){float ia=1.0f/fg.a;fg.r*=ia;fg.g*=ia;fg.b*=ia;fg.a=1;}
