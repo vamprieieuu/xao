@@ -263,6 +263,5 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   }
   const float fade=clamp01(params_.blendWithOriginal/100.0f);if(fade>0)for(int y=0;y<h;++y)for(int x=0;x<w;++x){Pixel& d=dst.at(x,y);const Pixel& o=src.at(x,y);d.r=d.r*(1-fade)+o.r*fade;d.g=d.g*(1-fade)+o.g*fade;d.b=d.b*(1-fade)+o.b*fade;d.a=d.a*(1-fade)+o.a*fade;}
  }
- }
 }
 } // namespace xao
