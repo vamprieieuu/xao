@@ -130,11 +130,14 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   if(params_.mappingMode==AsciiMappingMode::EdgeDirectional){
    float gx=0.0f,gy=0.0f;
    for(int sy=1;sy<7;++sy)for(int sx=1;sx<7;++sx){gx+=target[(std::size_t)sy*8+(sx+1)]-target[(std::size_t)sy*8+(sx-1)];gy+=target[(std::size_t)(sy+1)*8+sx]-target[(std::size_t)(sy-1)*8+sx];}
-   char32_t direction;
-   if(std::fabs(gx)>1.5f*std::fabs(gy))direction=U'-';
-   else if(std::fabs(gy)>1.5f*std::fabs(gx))direction=U'|';
-   else direction=(gx*gy>=0.0f)?U'\\':U'/';
-   for(const auto* candidate:candidates)if(candidate->codepoint==direction){glyph=candidate;break;}
+   const float edgeStrength=clamp01(std::sqrt(gx*gx+gy*gy)/36.0f);
+   if(edgeStrength>=clamp01(params_.edgeThreshold)){
+    char32_t direction;
+    if(std::fabs(gx)>1.5f*std::fabs(gy))direction=U'-';
+    else if(std::fabs(gy)>1.5f*std::fabs(gx))direction=U'|';
+    else direction=(gx*gy>=0.0f)?U'\\':U'/';
+    for(const auto* candidate:candidates)if(candidate->codepoint==direction){glyph=candidate;break;}
+   }
   }
   if(!glyph)glyph=selectGlyph(candidates,target,shapeMatch,(params_.randomCharacters||params_.randomWords)?params_.randomAmount:0,rv);
   if(!glyph)continue;
