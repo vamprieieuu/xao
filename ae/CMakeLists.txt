@@ -111,7 +111,8 @@ if(MSVC)
     # have loaded.  Optimisation flags follow the proven reference build.
     set_property(TARGET XAO_ASCII PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    target_compile_options(XAO_ASCII PRIVATE /W3 /EHsc /MP /O2 /fp:fast)
+    # C5033: the SDK's own headers use the 'register' keyword.
+    target_compile_options(XAO_ASCII PRIVATE /W3 /wd5033 /EHsc /MP /O2 /fp:fast)
     # The AE SDK headers are C-era code; /permissive- is deliberately not used.
     target_link_options(XAO_ASCII PRIVATE
         /SUBSYSTEM:WINDOWS

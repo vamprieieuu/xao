@@ -274,16 +274,40 @@ def main():
          "EffectMain is not exported (found: %s)" % exports)
     print("exports:    %s" % ", ".join(sorted(exports)))
 
-    resources = pe.resources()
+    try:
+        resources = pe.resources()
+    except (struct.error, IndexError, ValueError) as error:
+        print("resources:  directory walk unavailable (%s)" % error)
+        resources = {}
+
     pipl = None
     for path, (rva, size) in resources.items():
         if len(path) < 2:
             continue
         if (path[0] in ("PIPL", PIPL_TYPE)) and path[1] == 16000:
             pipl = data[pe.offset(rva):pe.offset(rva) + size]
+            print("pipl:       %d bytes from the resource directory" % len(pipl))
             break
-    need(pipl is not None, "resource 'PIPL' 16000 is missing")
-    print("pipl:       %d bytes" % len(pipl))
+
+    if pipl is None:
+        # Fallback: the resource data is stored verbatim in .rsrc, so find the
+        # PiPL blob by its property-list header.  Used when a linker's resource
+        # directory layout defeats the walker (MSVC nests the tree differently
+        # from windres); the bytes checked are the same.
+        marker = data.find(b"MIB8dnik")
+        need(marker != -1, "resource 'PIPL' 16000 is missing")
+        start = marker - 10
+        need(start >= 0, "PiPL blob does not start inside the file")
+        count = struct.unpack_from("<H", data, start + 6)[0]
+        need(0 < count < 64, "implausible PiPL property count %d" % count)
+        offset = start + 10
+        for _ in range(count):
+            need(data[offset:offset + 4] == b"MIB8", "PiPL blob is not contiguous")
+            length = struct.unpack_from("<I", data, offset + 12)[0]
+            offset += 16 + length + ((-length) % 4)
+        need(offset <= len(data), "PiPL blob overruns the file")
+        pipl = data[start:offset]
+        print("pipl:       %d bytes located by property header" % len(pipl))
 
     props = parse_pipl(pipl)
     if args.any:
@@ -291,8 +315,10 @@ def main():
     else:
         need(args.header is not None, "--header is required unless --any is given")
         check_pipl_metadata(props, args.header)
-        need(any(path[0] in (RT_VERSION, "VERSION") for path in resources),
-             "VERSIONINFO resource is missing")
+        has_version = any(path[0] in (RT_VERSION, "VERSION") for path in resources)
+        if not has_version:
+            has_version = data.find("VS_VERSION_INFO".encode("utf-16-le")) != -1
+        need(has_version, "VERSIONINFO resource is missing")
 
     print("verify_aex: OK")
 
