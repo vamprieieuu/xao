@@ -21,7 +21,7 @@
 namespace {
 enum {
  P_INPUT=0,
- P_TOPIC_MAIN,P_TOPIC_CORE,P_PRESET,P_CHARSET,P_CELL,P_AMOUNT,P_STRENGTH,P_TOPIC_CORE_END,
+ P_TOPIC_MAIN,P_PRESET,P_CHARSET,P_CELL,P_AMOUNT,P_STRENGTH,
  P_TOPIC_SCALE,P_USE_CLIP_SCALE,P_CLIP_SCALE,P_USE_CHAR_SIZE,P_CHAR_SIZE,P_USE_NUMBER_SIZE,P_NUMBER_SIZE,
  P_USE_WORD_SIZE,P_WORD_SIZE,P_USE_CHAR_MARGIN,P_CHAR_MARGIN,P_CELL_MARGIN,P_TOPIC_SCALE_END,
  P_TOPIC_RANDOM,P_RANDOM_CHAR,P_RANDOM_WORD,P_RANDOM_TIMING,P_RANDOM_AMOUNT,P_RANDOM_SPEED,P_RANDOM_SEED,P_RANDOM_VARIATION,P_TOPIC_RANDOM_END,
@@ -56,14 +56,12 @@ template<class PX>PF_Err Render(const PF_EffectWorld* s,PF_EffectWorld* d,const 
 PF_Err Global(PF_OutData* o){o->my_version=PF_VERSION(1,1,0,PF_Stage_DEVELOP,1);o->out_flags=PF_OutFlag_DEEP_COLOR_AWARE;o->out_flags2=PF_OutFlag2_FLOAT_COLOR_AWARE|PF_OutFlag2_SUPPORTS_SMART_RENDER|PF_OutFlag2_SUPPORTS_THREADED_RENDERING;return PF_Err_NONE;}
 PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ParamDef def;AEFX_CLR_STRUCT(def);
- PF_ADD_TOPICX("XAO ASCII",0,P_TOPIC_MAIN);
- PF_ADD_TOPICX("ASCII Core",0,P_TOPIC_CORE);
+ PF_ADD_TOPICX("ASCII",0,P_TOPIC_MAIN);
  PF_ADD_POPUPX("ASCII Preset",22,1,"Default|Alien Signal|Circles and Dots|Classic|Corrupted|Crossword|Diamond|Matrix|Motherboard|Pink Shapes|CGO|Ghost|Liquid|Mosaic|Rainbow|Threshold|Micro|Organic|Photorealistic|Geometric|Glitch|Arabic Script",0,P_PRESET);
  PF_ADD_POPUPX("Character Set",29,1,"Use Preset|Language Only|Fantasy Marks|Vampire Numerals|Typewriter|Neo Tokyo|Binary Code|Punk Minimal|Cross Marks|Bubble Forms|Starfield|Diamond Signs|Dot Matrix|Circuit Lines I|Circuit Lines II|Alien Glyphs|Signal Bars|Classic Ramp|Minimal Ramp|Detailed Ramp|Bourke Ramp|Braille|Katakana|Block Mosaic|Quadrants|Box Drawing|ASCII Standard|ASCII Simple|ASCII Detailed",0,P_CHARSET);
  PF_ADD_FLOAT_SLIDERX("ASCII Cells",2,512,2,512,12,PF_Precision_INTEGER,0,0,P_CELL);
  PF_ADD_FLOAT_SLIDERX("ASCII Amount",0,100,0,100,100,PF_Precision_INTEGER,0,0,P_AMOUNT);
  PF_ADD_FLOAT_SLIDERX("ASCII Strength",0,200,0,200,100,PF_Precision_INTEGER,0,0,P_STRENGTH);
- PF_END_TOPIC(P_TOPIC_CORE_END);
  PF_ADD_TOPICX("Scale & Spacing",PF_ParamFlag_START_COLLAPSED,P_TOPIC_SCALE);
  PF_ADD_CHECKBOXX("Enable Clip Scale",0,0,P_USE_CLIP_SCALE);
  PF_ADD_FLOAT_SLIDERX("Clip Scale",10,400,10,400,100,PF_Precision_INTEGER,0,0,P_CLIP_SCALE);
@@ -77,7 +75,7 @@ PF_Err Params(PF_InData* in_data,PF_OutData* out){
  PF_ADD_FLOAT_SLIDERX("Character Margin",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_CHAR_MARGIN);
  PF_ADD_FLOAT_SLIDERX("Cell Margin",0,100,0,100,0,PF_Precision_INTEGER,0,0,P_CELL_MARGIN);
  PF_END_TOPIC(P_TOPIC_SCALE_END);
- PF_ADD_TOPICX("Randomization",PF_ParamFlag_START_COLLAPSED,P_TOPIC_RANDOM);
+ PF_ADD_TOPICX("Random",PF_ParamFlag_START_COLLAPSED,P_TOPIC_RANDOM);
  PF_ADD_CHECKBOXX("Random Characters",1,0,P_RANDOM_CHAR);
  PF_ADD_CHECKBOXX("Random Words",1,0,P_RANDOM_WORD);
  PF_ADD_CHECKBOXX("Random Timing",1,0,P_RANDOM_TIMING);
