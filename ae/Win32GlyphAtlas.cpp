@@ -55,6 +55,34 @@ bool hasGlyph(HDC dc,const std::wstring& text){if(text.empty())return false;std:
 void addCodepoint(std::vector<Token>& out,std::set<std::wstring>& seen,char32_t cp,int font,bool rtl=false,float scale=1.0f,bool family=false){auto s=toWide(cp);if(s.empty())return;std::wstring key=std::to_wstring(font)+L"|"+(family?L"1":L"0")+L"|"+s;if(!seen.insert(key).second)return;out.push_back({std::move(s),cp,false,isNumber(cp),rtl,family,font,scale});}
 void addRange(std::vector<Token>& out,std::set<std::wstring>& seen,char32_t first,char32_t last,int font,bool rtl=false,float scale=1.0f,bool family=false){for(char32_t cp=first;cp<=last;++cp)addCodepoint(out,seen,cp,font,rtl,scale,family);}
 void addText(std::vector<Token>& out,std::set<std::wstring>& seen,std::u32string_view text,int font,float scale=1.0f,bool family=false){for(char32_t cp:text)addCodepoint(out,seen,cp,font,false,scale,family);}
+void addArabicPresentationForms(std::vector<Token>& out,std::set<std::wstring>& seen,int font,float scale){
+ // Arabic/Persian joining forms: isolated, final, initial, medial. Uniscribe
+ // still shapes full word tokens; these forms let the per-cell letter mode
+ // render the appropriate contextual glyph repertoire as individual tiles.
+ static constexpr char32_t forms[][5]={
+  {0x0621,0xFE80,0,0,0},{0x0622,0xFE81,0xFE82,0,0},{0x0623,0xFE83,0xFE84,0,0},
+  {0x0624,0xFE85,0xFE86,0,0},{0x0625,0xFE87,0xFE88,0,0},{0x0626,0xFE89,0xFE8A,0xFE8B,0xFE8C},
+  {0x0627,0xFE8D,0xFE8E,0,0},{0x0628,0xFE8F,0xFE90,0xFE91,0xFE92},
+  {0x0629,0xFE93,0xFE94,0,0},{0x062A,0xFE95,0xFE96,0xFE97,0xFE98},
+  {0x062B,0xFE99,0xFE9A,0xFE9B,0xFE9C},{0x062C,0xFE9D,0xFE9E,0xFE9F,0xFEA0},
+  {0x062D,0xFEA1,0xFEA2,0xFEA3,0xFEA4},{0x062E,0xFEA5,0xFEA6,0xFEA7,0xFEA8},
+  {0x062F,0xFEA9,0xFEAA,0,0},{0x0630,0xFEAB,0xFEAC,0,0},
+  {0x0631,0xFEAD,0xFEAE,0,0},{0x0632,0xFEAF,0xFEB0,0,0},
+  {0x0633,0xFEB1,0xFEB2,0xFEB3,0xFEB4},{0x0634,0xFEB5,0xFEB6,0xFEB7,0xFEB8},
+  {0x0635,0xFEB9,0xFEBA,0xFEBB,0xFEBC},{0x0636,0xFEBD,0xFEBE,0xFEBF,0xFEC0},
+  {0x0637,0xFEC1,0xFEC2,0xFEC3,0xFEC4},{0x0638,0xFEC5,0xFEC6,0xFEC7,0xFEC8},
+  {0x0639,0xFEC9,0xFECA,0xFECB,0xFECC},{0x063A,0xFECD,0xFECE,0xFECF,0xFED0},
+  {0x0641,0xFED1,0xFED2,0xFED3,0xFED4},{0x0642,0xFED5,0xFED6,0xFED7,0xFED8},
+  {0x0643,0xFED9,0xFEDA,0xFEDB,0xFEDC},{0x0644,0xFEDD,0xFEDE,0xFEDF,0xFEE0},
+  {0x0645,0xFEE1,0xFEE2,0xFEE3,0xFEE4},{0x0646,0xFEE5,0xFEE6,0xFEE7,0xFEE8},
+  {0x0647,0xFEE9,0xFEEA,0xFEEB,0xFEEC},{0x0648,0xFEED,0xFEEE,0,0},
+  {0x0649,0xFEEF,0xFEF0,0,0},{0x064A,0xFEF1,0xFEF2,0xFEF3,0xFEF4},
+  {0x067E,0xFB56,0xFB57,0xFB58,0xFB59},{0x0686,0xFB7A,0xFB7B,0xFB7C,0xFB7D},
+  {0x0698,0xFB8A,0xFB8B,0,0},{0x06A9,0xFB8E,0xFB8F,0xFB90,0xFB91},
+  {0x06AF,0xFB92,0xFB93,0xFB94,0xFB95},{0x06CC,0xFBFC,0xFBFD,0xFBFE,0xFBFF}
+ };
+ for(const auto& row:forms)for(int i=1;i<5;++i)if(row[i])addCodepoint(out,seen,row[i],font,true,scale,true);
+}
 void addWords(std::vector<Token>& out,const std::u32string& alphabet,std::uint32_t seed,int font,bool rtl,float scale,bool family=true){if(alphabet.empty())return;std::mt19937 rng(seed);std::uniform_int_distribution<int> len(3,7);std::uniform_int_distribution<std::size_t> pick(0,alphabet.size()-1);for(int n=0;n<72;++n){std::wstring word;int count=len(rng);for(int i=0;i<count;++i){word+=toWide(alphabet[pick(rng)]);if(rtl&&(rng()%5u)==0u)word+=toWide((char32_t)(0x064B+(rng()%15u)));}out.push_back({std::move(word),0,true,false,rtl,family,font,scale});}}
 HRESULT drawText(HDC dc,const Token& token){if(token.text.empty())return E_INVALIDARG;SCRIPT_STRING_ANALYSIS analysis=nullptr;DWORD flags=SSA_GLYPHS|SSA_FALLBACK|SSA_LINK;if(token.rtl)flags|=SSA_RTL;HRESULT hr=ScriptStringAnalyse(dc,token.text.c_str(),(int)token.text.size(),0,-1,flags,kAtlasW,nullptr,nullptr,nullptr,nullptr,nullptr,&analysis);if(FAILED(hr))return hr;const SIZE* extent=ScriptString_pSize(analysis);int x=extent?std::max(0,(kAtlasW-(int)extent->cx)/2):0;int y=extent?std::max(0,(kAtlasH-(int)extent->cy)/2):0;hr=ScriptStringOut(analysis,x,y,0,nullptr,0,-1,FALSE);ScriptStringFree(&analysis);return hr;}
 std::wstring makeKey(const AsciiParams& p){const bool ancient=p.ancientLetters||p.ancientNumbers||p.ancientWords,english=p.englishLetters||p.englishNumbers||p.englishWords,arabic=p.arabicLetters||p.arabicNumbers||p.arabicWords;const int cs=(int)p.characterSet;std::wstring k=std::to_wstring((int)p.preset)+L"|" +std::to_wstring((int)p.visualStyle)+L"|" +std::to_wstring(cs)+L"|"+std::to_wstring(p.ancientFont)+L"|"+std::to_wstring(english?p.englishFont:0)+L"|"+std::to_wstring(arabic?p.arabicFont:0)+L"|"+std::to_wstring((p.randomWords||p.ancientWords||p.englishWords||p.arabicWords)?p.randomSeed:0)+L"|"+std::to_wstring(arabic&&p.arabicNumbers?p.arabicNumberStyle:0);const bool f[]={p.randomWords,p.ancientLetters,p.ancientNumbers,p.ancientWords,p.englishLetters,p.englishNumbers,p.englishWords,p.arabicLetters,p.arabicNumbers,p.arabicWords,p.useAncientSize,p.useEnglishSize,p.useArabicSize};for(bool v:f)k+=v?L"1":L"0";k+=L"|"+std::to_wstring((int)std::lround(p.ancientSize))+L"|"+std::to_wstring((int)std::lround(p.englishSize))+L"|"+std::to_wstring((int)std::lround(p.arabicSize));return k;}
@@ -87,7 +115,7 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  if(p.englishLetters)addText(tokens,seen,english,englishFont,englishScale,true);
  if(p.englishNumbers)addText(tokens,seen,U"0123456789",englishFont,englishScale,true);
  if(p.englishWords)addWords(tokens,english,p.randomSeed^0xE61A5u,englishFont,false,englishScale,true);
- if(p.arabicLetters)addText(tokens,seen,arabic,arabicFont,arabicScale,true);
+ if(p.arabicLetters){addText(tokens,seen,arabic,arabicFont,arabicScale,true);addArabicPresentationForms(tokens,seen,arabicFont,arabicScale);}
  if(p.arabicNumbers){if(p.arabicNumberStyle==1)addText(tokens,seen,U"۰۱۲۳۴۵۶۷۸۹",arabicFont,arabicScale,true);else if(p.arabicNumberStyle==2)addText(tokens,seen,U"0123456789",arabicFont,arabicScale,true);else addText(tokens,seen,U"٠١٢٣٤٥٦٧٨٩",arabicFont,arabicScale,true);}
  if(p.arabicWords)addWords(tokens,arabic,p.randomSeed^0xA2AB1Cu,arabicFont,true,arabicScale,true);
  if(p.randomWords&&std::none_of(tokens.begin(),tokens.end(),[](const Token& t){return t.word;})){
