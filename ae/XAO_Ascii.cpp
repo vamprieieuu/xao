@@ -265,8 +265,10 @@ PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data) {
     // Must match XAO_PIPL_OUT_FLAGS / XAO_PIPL_OUT_FLAGS2 (asserted above).
     out_data->out_flags = PF_OutFlag_DEEP_COLOR_AWARE |
                           PF_OutFlag_SEND_UPDATE_PARAMS_UI;
-    out_data->out_flags2 = PF_OutFlag2_I_AM_THREADSAFE |
-                           PF_OutFlag2_FLOAT_COLOR_AWARE;
+    // This adapter currently uses legacy PF_Cmd_RENDER, not SmartFX.
+    // Do not advertise FLOAT_COLOR_AWARE until SMART_PRE_RENDER and
+    // SMART_RENDER are implemented; AE requires SmartFX for 32-bpc support.
+    out_data->out_flags2 = PF_OutFlag2_I_AM_THREADSAFE;
     (void)in_data;
     return PF_Err_NONE;
 }
