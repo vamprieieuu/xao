@@ -124,7 +124,7 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_PRESET,[&](PF_ParamDef& p){preset=p.u.pd.value;});
  preset=std::clamp<A_long>(preset,1,22);
  if(preset<=10)xao::applyCratesPreset(state->ascii,(xao::AsciiPresetId)(preset-1));
- else if(preset==22){state->ascii.characterSet=xao::AsciiCharacterSetId::Count;state->ascii.randomCharacters=true;state->ascii.randomWords=false;state->ascii.randomTiming=true;state->ascii.arabicLetters=true;state->ascii.arabicNumbers=true;state->ascii.arabicWords=true;}
+ else if(preset==22){state->ascii.characterSet=xao::AsciiCharacterSetId::Count;state->ascii.randomCharacters=true;state->ascii.randomWords=false;state->ascii.randomTiming=true;}
  else{
   state->ascii.visualStyle=(xao::AsciiVisualStyle)(preset-10);
   switch(state->ascii.visualStyle){
@@ -176,9 +176,10 @@ PF_Err Pre(PF_InData* in,PF_OutData*,PF_PreRenderExtra* e){
  read(P_ENGLISH_FONT,[&](PF_ParamDef& p){state->ascii.englishFont=(std::uint8_t)std::clamp<A_long>(p.u.pd.value,1,10);});
  read(P_ENGLISH_SIZE_ENABLE,[&](PF_ParamDef& p){state->ascii.useEnglishSize=p.u.bd.value!=0;});
  read(P_ENGLISH_SIZE,[&](PF_ParamDef& p){state->ascii.englishSize=(float)p.u.fs_d.value;});
- read(P_ARABIC_LETTERS,[&](PF_ParamDef& p){state->ascii.arabicLetters=p.u.bd.value!=0||preset==22;});
- read(P_ARABIC_NUMBERS,[&](PF_ParamDef& p){state->ascii.arabicNumbers=p.u.bd.value!=0||preset==22;});
- read(P_ARABIC_WORDS,[&](PF_ParamDef& p){state->ascii.arabicWords=p.u.bd.value!=0||preset==22;});
+ read(P_ARABIC_LETTERS,[&](PF_ParamDef& p){state->ascii.arabicLetters=p.u.bd.value!=0;});
+ read(P_ARABIC_NUMBERS,[&](PF_ParamDef& p){state->ascii.arabicNumbers=p.u.bd.value!=0;});
+ read(P_ARABIC_WORDS,[&](PF_ParamDef& p){state->ascii.arabicWords=p.u.bd.value!=0;});
+ if(preset==22&&!state->ascii.arabicLetters&&!state->ascii.arabicNumbers&&!state->ascii.arabicWords){state->ascii.arabicLetters=true;state->ascii.arabicNumbers=true;state->ascii.arabicWords=true;}
  read(P_ARABIC_FONT,[&](PF_ParamDef& p){state->ascii.arabicFont=(std::uint8_t)std::clamp<A_long>(p.u.pd.value,1,24);});
  read(P_ARABIC_SIZE_ENABLE,[&](PF_ParamDef& p){state->ascii.useArabicSize=p.u.bd.value!=0;});
  read(P_ARABIC_SIZE,[&](PF_ParamDef& p){state->ascii.arabicSize=(float)p.u.fs_d.value;});
