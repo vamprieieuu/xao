@@ -102,10 +102,11 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  if(src.width()!=dst.width()||src.height()!=dst.height())throw std::invalid_argument("ASCII dimensions must match");
  if(src.empty())return;
  dst=src;
- int w=src.width(),h=src.height();const int cells=std::clamp(params_.cellSize,2,512);int cell=std::clamp((int)std::lround(96.0f/(float)cells),2,48);
+ int w=src.width(),h=src.height();int cell=std::clamp(params_.cellSize,2,512);
  if(params_.visualStyle==AsciiVisualStyle::Micro)cell=std::max(2,cell/2);
- float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);const float glyphOpacity=clamp01(params_.asciiStrength/100.0f)*clamp01(params_.asciiAmount/100.0f);if(glyphOpacity<=1.0e-6f)return;
- float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f)*clampf(params_.presetCharacterSize/100.0f,.1f,3.0f);
+ float contrast=clampf(params_.contrast,0,4),brightness=clampf(params_.brightness,-1,1);const float strength=clampf(params_.asciiStrength,0.0f,500.0f);const float glyphOpacity=clamp01(strength/100.0f)*clamp01(params_.asciiAmount/100.0f);if(glyphOpacity<=1.0e-6f)return;
+ const float strengthDensityScale=1.0f+0.20f*std::max(0.0f,strength/100.0f-1.0f);
+ float glyphScale=clampf(params_.useClipScale?params_.glyphScale:0.88f,.05f,3.0f)*clampf(params_.presetCharacterSize/100.0f,.1f,3.0f)*strengthDensityScale;
  if(params_.visualStyle==AsciiVisualStyle::Micro)glyphScale*=0.68f;
  if(params_.visualStyle==AsciiVisualStyle::Photorealistic)glyphScale*=0.92f;
  float charMargin=clampf(params_.characterMargin/200.0f,0,.45f),cellMargin=clampf(params_.cellMargin/200.0f,0,.45f);
