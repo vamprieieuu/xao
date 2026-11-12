@@ -33,7 +33,7 @@
 //   PF_OutFlag_DEEP_COLOR_AWARE        (1 << 25)
 //   PF_OutFlag_SEND_UPDATE_PARAMS_UI   (1 << 26)
 //   PF_OutFlag2_I_AM_THREADSAFE        (1 << 4)
-//   PF_OutFlag2_FLOAT_COLOR_AWARE      (1 << 12)
+//   PF_OutFlag2_FLOAT_COLOR_AWARE      intentionally disabled (legacy render path)
 // XAO_Ascii.cpp holds static_asserts for both.
 #define XAO_PIPL_OUT_FLAGS  0x06000000
 #define XAO_PIPL_OUT_FLAGS2 0x00000010
