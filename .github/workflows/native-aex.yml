@@ -1,5 +1,5 @@
 name: XAO Native AE Build
-# Final ASCII pass verification
+# Final ASCII pass verification: density, Arabic shaping, preset atlas and AE build
 concurrency:
  group: xao-native-aex-${{ github.ref }}
  cancel-in-progress: true
