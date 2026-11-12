@@ -104,7 +104,7 @@ class PE:
             result.append(self.data[name_off:end].decode("latin-1"))
         return result
 
-    def resources(self):
+    def resources(self, debug=False):
         """{(type, id, lang): (rva, size)}; types/ids may be strings or ints."""
         rva, size = self.directories[2]
         if rva == 0 or size == 0:
@@ -121,17 +121,31 @@ class PE:
 
         def walk(directory_offset, path):
             base = root + directory_offset
-            count = u16(self.data, base + 12) + u16(self.data, base + 14)
+            named = u16(self.data, base + 12)
+            ids = u16(self.data, base + 14)
+            count = named + ids
+            if debug:
+                print("  dir 0x%06x depth %d named=%d ids=%d" %
+                      (directory_offset, len(path), named, ids))
             for index in range(count):
                 entry = base + 16 + index * 16
                 raw_name = u32(self.data, entry)
                 target = u32(self.data, entry + 4)
                 key = (name_at(raw_name & 0x7FFFFFFF)
                        if raw_name & 0x80000000 else raw_name)
+                if debug:
+                    print("    entry %s name=0x%08x target=0x%08x -> %s" %
+                          (path + [key], raw_name, target,
+                           "dir" if target & 0x80000000 else "data"))
                 if target & 0x80000000:
                     walk(target & 0x7FFFFFFF, path + [key])
                     continue
                 data_offset = root + target
+                if data_offset + 8 > len(self.data):
+                    # Not fatal: the caller falls back to locating the PiPL by
+                    # its property header.
+                    raise ValueError("resource data entry at 0x%x is outside "
+                                     "the file" % data_offset)
                 found[tuple(path + [key])] = (u32(self.data, data_offset),
                                              u32(self.data, data_offset + 4))
 
@@ -242,6 +256,8 @@ def main():
                         help="ae/XAO_Ascii.h to compare metadata against")
     parser.add_argument("--any", action="store_true",
                         help="only check that the binary is a valid AE plug-in")
+    parser.add_argument("--debug", action="store_true",
+                        help="print the PE section table and resource tree")
     args = parser.parse_args()
 
     if args.pipl:
@@ -274,10 +290,17 @@ def main():
          "EffectMain is not exported (found: %s)" % exports)
     print("exports:    %s" % ", ".join(sorted(exports)))
 
+    if args.debug:
+        print("sections:")
+        for name, vaddr, vsize, rawptr, rawsize in pe.sections:
+            print("  %-8s va=0x%06x vsize=0x%06x raw=0x%06x rawsize=0x%06x" %
+                  (name, vaddr, vsize, rawptr, rawsize))
+        print("resource dir rva=0x%06x size=0x%06x" % pe.directories[2])
+
     try:
-        resources = pe.resources()
+        resources = pe.resources(debug=args.debug)
     except (struct.error, IndexError, ValueError) as error:
-        print("resources:  directory walk unavailable (%s)" % error)
+        print("resources:  directory walk failed (%s)" % error)
         resources = {}
 
     pipl = None

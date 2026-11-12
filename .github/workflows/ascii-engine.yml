@@ -106,7 +106,7 @@ jobs:
         shell: pwsh
         run: |
           python tools/verify_aex.py build-aex/bin/Release/XAO.aex `
-            --header ae/XAO_Ascii.h 2>&1 | Tee-Object -FilePath verify.txt
+            --header ae/XAO_Ascii.h --debug 2>&1 | Tee-Object -FilePath verify.txt
           if ($LASTEXITCODE -ne 0) { throw "AEX verification failed" }
 
       - name: Publish build report
