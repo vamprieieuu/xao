@@ -1,68 +1,89 @@
 cmake_minimum_required(VERSION 3.20)
-project(XAO_ASCII_Plugin LANGUAGES CXX)
+project(XAO_ASCII LANGUAGES C CXX)
 
-# Native After Effects plug-in build (Windows x64).
-#
-# Requirements:
-#   * Windows x64, Visual Studio 2022 (v143) or newer
-#   * The Adobe After Effects SDK laid out as Headers/ and Util/.  This is the
-#     layout used by vamprieieuu/Dithering_MAJEED_build_ready in
-#     extern/AfterEffectsSDK (Headers, Util, its own CMakeLists.txt).  The
-#     older "Examples/Headers" layout is not used and not required.
-#   * Python 3 for the PiPL generator (already on GitHub-hosted runners).
-#
-# Configure:
-#   cmake -S ae -B build-aex -G "Visual Studio 17 2022" -A x64 ^
-#         -DAE_SDK_PATH=C:/path/to/AfterEffectsSDK
-
-if(NOT DEFINED AE_SDK_PATH)
-    message(FATAL_ERROR
-        "AE_SDK_PATH is not set. Point it at an After Effects SDK root that "
-        "contains Headers/AE_Effect.h and Util/Param_Utils.h.")
-endif()
-
-get_filename_component(AE_SDK_PATH "${AE_SDK_PATH}" ABSOLUTE)
-
-set(AE_HEADERS "${AE_SDK_PATH}/Headers")
-set(AE_UTIL    "${AE_SDK_PATH}/Util")
-
-if(NOT EXISTS "${AE_HEADERS}/AE_Effect.h")
-    message(FATAL_ERROR "AE_Effect.h not found under ${AE_HEADERS}")
-endif()
-if(NOT EXISTS "${AE_UTIL}/Param_Utils.h")
-    message(FATAL_ERROR "Param_Utils.h not found under ${AE_UTIL}")
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 11)
 
 if(NOT WIN32)
-    message(FATAL_ERROR "The After Effects plug-in target is Windows x64 only.")
+    message(FATAL_ERROR "XAO ASCII AEX build requires Windows/MSVC.")
 endif()
 
-enable_language(RC)
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+# Match the proven Dithering MAJEED build: compile Adobe's SDK support library
+# and use Adobe's PiPLtool.exe + cl.exe preprocessing pipeline.
+if(NOT DEFINED AE_SDK_PATH)
+    message(FATAL_ERROR "AE_SDK_PATH must point to the AfterEffectsSDK root.")
+endif()
+get_filename_component(AE_SDK_PATH "${AE_SDK_PATH}" ABSOLUTE)
+if(NOT EXISTS "${AE_SDK_PATH}/CMakeLists.txt")
+    message(FATAL_ERROR "After Effects SDK CMakeLists.txt not found: ${AE_SDK_PATH}")
+endif()
+add_subdirectory("${AE_SDK_PATH}" "${CMAKE_CURRENT_BINARY_DIR}/extern/AfterEffectsSDK")
 
 set(XAO_AE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(XAO_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../core")
+set(PIPL_R "${XAO_AE_DIR}/XAO_PiPL.r")
+set(PIPL_RR "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.rr")
+set(PIPL_RRC "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.rrc")
+set(PIPL_RC "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.generated.rc")
+set(PIPL_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/GenerateXAOPiPL.cmd")
+set(PIPLTOOL "${AESDK_ROOT}/Resources/PiPLtool.exe")
 
-set(PIPL_BIN "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.bin")
-set(PIPL_RC  "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.rc")
+if(NOT EXISTS "${PIPL_R}")
+    message(FATAL_ERROR "PiPL source not found: ${PIPL_R}")
+endif()
+if(NOT EXISTS "${PIPLTOOL}")
+    message(FATAL_ERROR "Adobe PiPLtool.exe not found: ${PIPLTOOL}")
+endif()
 
-# PiPL: a binary resource generated from ae/XAO_Ascii.h.  PiPLtool.exe is not
-# part of the SDK layout this project builds against, so the resource is written
-# directly.  See ae/pipl_gen.py and tools/verify_aex.py.
+# Same three-step Adobe SDK sequence used by the known-good MAJEED project:
+# cl /EP .r -> .rr; PiPLtool .rr -> .rrc; cl /D MSWindows /EP .rrc -> .rc.
+file(WRITE "${PIPL_SCRIPT}" [=[
+@echo off
+setlocal
+set "CL_EXE=@CL_EXE@"
+set "SDK_HEADERS=@SDK_HEADERS@"
+set "PIPL_IN=@PIPL_IN@"
+set "PIPL_RR=@PIPL_RR@"
+set "PIPLTOOL=@PIPLTOOL@"
+set "PIPL_RRC=@PIPL_RRC@"
+set "PIPL_RC=@PIPL_RC@"
+
+"%CL_EXE%" /nologo /I "%SDK_HEADERS%" /EP "%PIPL_IN%" > "%PIPL_RR%"
+if errorlevel 1 exit /b %errorlevel%
+
+"%PIPLTOOL%" "%PIPL_RR%" "%PIPL_RRC%"
+if errorlevel 1 exit /b %errorlevel%
+
+"%CL_EXE%" /nologo /D "MSWindows" /EP "%PIPL_RRC%" > "%PIPL_RC%"
+if errorlevel 1 exit /b %errorlevel%
+
+if not exist "%PIPL_RC%" exit /b 2
+exit /b 0
+]=])
+
+file(READ "${PIPL_SCRIPT}" PIPL_SCRIPT_TEXT)
+string(REPLACE "@CL_EXE@" "${CMAKE_C_COMPILER}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
+string(REPLACE "@SDK_HEADERS@" "${AESDK_ROOT}/Headers" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
+string(REPLACE "@PIPL_IN@" "${PIPL_R}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
+string(REPLACE "@PIPL_RR@" "${PIPL_RR}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
+string(REPLACE "@PIPLTOOL@" "${PIPLTOOL}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
+string(REPLACE "@PIPL_RRC@" "${PIPL_RRC}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
+string(REPLACE "@PIPL_RC@" "${PIPL_RC}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
+file(WRITE "${PIPL_SCRIPT}" "${PIPL_SCRIPT_TEXT}")
+
 add_custom_command(
-    OUTPUT "${PIPL_RC}" "${PIPL_BIN}"
-    COMMAND "${Python3_EXECUTABLE}" "${XAO_AE_DIR}/pipl_gen.py"
-            --header "${XAO_AE_DIR}/XAO_Ascii.h"
-            --rc "${PIPL_RC}"
-            --bin "${PIPL_BIN}"
-    DEPENDS "${XAO_AE_DIR}/pipl_gen.py" "${XAO_AE_DIR}/XAO_Ascii.h"
-    COMMENT "Generating XAO PiPL resource"
-    VERBATIM)
+    OUTPUT "${PIPL_RC}"
+    COMMAND cmd.exe /C call "${PIPL_SCRIPT}"
+    DEPENDS "${PIPL_R}" "${PIPLTOOL}"
+    VERBATIM
+    COMMENT "Generating XAO PiPL with Adobe PiPLtool"
+)
 
 add_library(XAO_ASCII SHARED
-    XAO_Ascii.cpp
-    XAO_Ascii.rc
     "${PIPL_RC}"
+    XAO_Ascii.rc
+    XAO_Ascii.cpp
     "${XAO_CORE_DIR}/src/Image.cpp"
     "${XAO_CORE_DIR}/src/Compositor.cpp"
     "${XAO_CORE_DIR}/src/Pipeline.cpp"
@@ -72,51 +93,38 @@ add_library(XAO_ASCII SHARED
     "${XAO_CORE_DIR}/src/ascii/AtlasData.cpp"
     "${XAO_CORE_DIR}/src/ascii/GlyphSets.cpp"
     "${XAO_CORE_DIR}/src/ascii/Palette.cpp"
-    "${XAO_CORE_DIR}/src/ascii/AsciiEngine.cpp")
+    "${XAO_CORE_DIR}/src/ascii/AsciiEngine.cpp"
+)
 
-set_target_properties(XAO_ASCII PROPERTIES
-    PREFIX ""
-    SUFFIX ".aex"
-    OUTPUT_NAME "XAO"
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug")
+add_dependencies(XAO_ASCII AESDK)
 
 target_include_directories(XAO_ASCII PRIVATE
     "${XAO_AE_DIR}"
-    "${AE_HEADERS}"
-    "${AE_HEADERS}/SP"
-    "${AE_UTIL}"
-    "${XAO_CORE_DIR}/include")
+    "${XAO_CORE_DIR}/include"
+    ${AESDK_INCLUDE}
+)
 
+target_link_libraries(XAO_ASCII PRIVATE AESDK)
 target_compile_definitions(XAO_ASCII PRIVATE
-    AE_OS_WIN
-    MSWindows
-    _WINDOWS
-    WIN32
-    _WIN32
-    _WIN64
-    AE_PLUGIN_BUILD
-    _CRT_SECURE_NO_WARNINGS
-    NOMINMAX
-    WIN32_LEAN_AND_MEAN)
+    AE_OS_WIN MSWindows _WINDOWS WIN32 _WIN32 _WIN64
+    AE_PLUGIN_BUILD _CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN
+)
 
 if(MSVC)
-    # Static CRT so the plug-in does not depend on a runtime the host may not
-    # have loaded.  Optimisation flags follow the proven reference build.
-    set_property(TARGET XAO_ASCII PROPERTY
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    # C5033: the SDK's own headers use the 'register' keyword.
     target_compile_options(XAO_ASCII PRIVATE /W3 /wd5033 /EHsc /MP /O2 /fp:fast)
-    # The AE SDK headers are C-era code; /permissive- is deliberately not used.
     target_link_options(XAO_ASCII PRIVATE
         /SUBSYSTEM:WINDOWS
-        "/DEF:${XAO_AE_DIR}/XAO_Ascii.def")
+        "/DEF:${XAO_AE_DIR}/XAO_Ascii.def"
+    )
 endif()
 
-install(TARGETS XAO_ASCII RUNTIME DESTINATION ".")
+set_target_properties(XAO_ASCII PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "XAO"
+    SUFFIX ".aex"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
+)
+
+install(TARGETS XAO_ASCII DESTINATION ".")
