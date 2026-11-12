@@ -259,7 +259,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
   y0=y1;
  }
  if(params_.visualStyle==AsciiVisualStyle::Mosaic){
-  const int tile=std::clamp(cell*3,6,384);
+  const int tile=std::clamp((int)std::lround((float)cell*3.0f/strengthDensityScale),6,384);
   for(int ty=0;ty<h;ty+=tile)for(int tx=0;tx<w;tx+=tile){
    const int xEnd=std::min(w,tx+tile),yEnd=std::min(h,ty+tile);Pixel avgTile{0,0,0,0};int count=0;
    for(int yy=ty;yy<yEnd;++yy)for(int xx=tx;xx<xEnd;++xx){const Pixel& q=src.at(xx,yy);avgTile.r+=q.r;avgTile.g+=q.g;avgTile.b+=q.b;avgTile.a+=q.a;++count;}
@@ -284,7 +284,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
  }
  if(params_.visualStyle==AsciiVisualStyle::Threshold){
   for(int y=0;y<h;++y)for(int x=0;x<w;++x)dst.at(x,y)=scaled(src.at(x,y),0.38f);
-  const int rowStep=std::clamp(cell,3,48),segment=std::clamp(cell*3,8,512);
+  const int rowStep=std::clamp((int)std::lround((float)cell/strengthDensityScale),3,48),segment=std::clamp((int)std::lround((float)cell*3.0f/strengthDensityScale),8,512);
   const int barHeight=std::max(1,rowStep/3);const float phase=(float)ctx.timeSeconds*1.7f;const float amount=clamp01(params_.asciiAmount/100.0f);
   for(int y=0,row=0;y<h;y+=rowStep,++row)for(int x=0,col=0;x<w;x+=segment,++col){
    const int xEnd=std::min(w,x+segment);float lum=0.0f;float alphaSum=0.0f;int count=0;
@@ -294,6 +294,21 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    const float sourceAlpha=clamp01(alphaSum/(float)count);const float barLuma=0.20f+0.80f*l;const float alpha=sourceAlpha*(0.62f+0.38f*l)*amount;
    const int sx0=std::min(w-1,x+((int)phase+shift)%(std::max(1,segment/3)));
    for(int yy=y;yy<std::min(h,y+barHeight);++yy)for(int xx=sx0;xx<std::min(w,sx0+length);++xx){Pixel bar=scaled(Pixel{barLuma,barLuma,barLuma,1.0f},alpha);Pixel& d=dst.at(xx,yy);const float invA=1.0f-bar.a;d={bar.r+d.r*invA,bar.g+d.g*invA,bar.b+d.b*invA,bar.a+d.a*invA};}
+  }
+  // Sparse animated blocks break the scan bars into the moving rectangular
+  // fragments visible in the Threshold reference.
+  const int blockStep=std::max(8,segment/2);
+  for(int by=0,row=0;by<h;by+=std::max(4,rowStep*2),++row)for(int bx=0,col=0;bx<w;bx+=blockStep,++col){
+   const std::uint32_t blockSeed=hash32(params_.randomSeed^(std::uint32_t)row*0xA511E9B3u^(std::uint32_t)col*0x85EBCA6Bu);
+   if((blockSeed&3u)==0u)continue;
+   const int bw=std::clamp(4+(int)((blockSeed>>4)%std::max(5,segment/2)),4,std::max(4,segment));
+   const int bh=std::clamp(2+(int)((blockSeed>>13)%std::max(3,rowStep*2)),2,std::max(2,rowStep*2));
+   const int travel=std::max(1,blockStep/3);
+   const int left=(bx+(int)(blockSeed%((std::uint32_t)travel))+(int)(phase*3.0f))%std::max(1,w);
+   const int top=(by+(int)((blockSeed>>20)%((std::uint32_t)std::max(1,rowStep*2))))%std::max(1,h);
+   const float level=0.18f+0.72f*(float)((blockSeed>>24)&255u)/255.0f;
+   const float alpha=clamp01(amount*(0.16f+0.28f*level));
+   for(int yy=top;yy<std::min(h,top+bh);++yy)for(int xx=left;xx<std::min(w,left+bw);++xx){Pixel& d=dst.at(xx,yy);const float inv=1.0f-alpha;d.r=d.r*inv+level*alpha;d.g=d.g*inv+level*alpha;d.b=d.b*inv+level*alpha;}
   }
   const float fade=std::clamp(params_.blendWithOriginal/100.0f,0.0f,2.0f);if(fade>0)for(int y=0;y<h;++y)for(int x=0;x<w;++x){Pixel& d=dst.at(x,y);const Pixel& o=src.at(x,y);d.r=d.r*(1-fade)+o.r*fade;d.g=d.g*(1-fade)+o.g*fade;d.b=d.b*(1-fade)+o.b*fade;d.a=d.a*(1-fade)+o.a*fade;}
  }
