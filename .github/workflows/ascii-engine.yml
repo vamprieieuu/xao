@@ -2,14 +2,17 @@ name: XAO ASCII engine
 
 on:
   push:
-    branches: ["**"]
+    branches-ignore: ["ci/ae-build-report"]
   pull_request:
   workflow_dispatch:
-    inputs:
-      ae_sdk_path:
-        description: "Path to the After Effects SDK on the Windows runner (leave empty to skip the AEX build)"
-        required: false
-        default: ""
+
+env:
+  # The After Effects SDK is Adobe-licensed and cannot be fetched from adobe.com
+  # by CI.  The headers this adapter is audited against live in the reference
+  # repository, pinned by commit so the build is reproducible.
+  AE_SDK_REPOSITORY: vamprieieuu/Dithering_MAJEED_build_ready
+  AE_SDK_COMMIT: ea1f39e974daccd11bec2c3802c9e424f26afdc6
+  AE_SDK_SUBDIR: extern/AfterEffectsSDK
 
 jobs:
   core-tests:
@@ -24,8 +27,15 @@ jobs:
       - name: Core tests
         run: ./build/xao_core_tests
 
-      - name: ASCII regression tests
+      - name: ASCII regression tests (129 checks)
         run: ./build/ascii_tests
+
+      - name: Generate and check the PiPL resource
+        run: |
+          python3 ae/pipl_gen.py --header ae/XAO_Ascii.h \
+            --rc build/XAO_PiPL.rc --bin build/XAO_PiPL.bin
+          python3 tools/verify_aex.py --pipl build/XAO_PiPL.bin \
+            --header ae/XAO_Ascii.h
 
       - name: Upload offline renderer
         uses: actions/upload-artifact@v4
@@ -35,35 +45,89 @@ jobs:
           if-no-files-found: error
 
   windows-aex:
-    name: Windows x64 AEX build
+    name: Windows x64 AEX build (MSVC)
     runs-on: windows-latest
-    # The After Effects SDK cannot be downloaded automatically: it is licensed
-    # by Adobe. Provide its path to build the plug-in binary.
-    if: ${{ github.event.inputs.ae_sdk_path != '' }}
+    permissions:
+      contents: write   # only to publish the build report branch
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure
-        run: >
-          cmake -S ae -B build-aex -G "Visual Studio 17 2022" -A x64
-          -DAE_SDK_PATH="${{ github.event.inputs.ae_sdk_path }}"
+      - name: Check out the After Effects SDK
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.AE_SDK_REPOSITORY }}
+          ref: ${{ env.AE_SDK_COMMIT }}
+          path: .ae-sdk
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - name: Build
-        run: cmake --build build-aex --config Release
-
-      - name: Verify export
+      - name: Confirm SDK layout
         shell: pwsh
         run: |
-          $aex = Get-ChildItem -Recurse build-aex -Filter XAO.aex | Select-Object -First 1
-          if (-not $aex) { throw "XAO.aex was not produced" }
-          Write-Host "Built $($aex.FullName) ($($aex.Length) bytes)"
-          $bytes = [System.IO.File]::ReadAllBytes($aex.FullName)
-          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
-          if ($text -notmatch "EffectMain") { throw "EffectMain export missing" }
-          if ($text -notmatch "XAO ASCII") { throw "PiPL name missing" }
+          $sdk = Join-Path $env:GITHUB_WORKSPACE ".ae-sdk/${{ env.AE_SDK_SUBDIR }}"
+          foreach ($f in "Headers/AE_Effect.h", "Headers/AE_EffectCBSuites.h",
+                         "Headers/AE_EffectPixelFormat.h", "Util/Param_Utils.h") {
+            if (-not (Test-Path (Join-Path $sdk $f))) { throw "SDK file missing: $f" }
+          }
+          Write-Host "SDK root: $sdk"
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S ae -B build-aex -G "Visual Studio 17 2022" -A x64 `
+            -DAE_SDK_PATH="$env:GITHUB_WORKSPACE/.ae-sdk/${{ env.AE_SDK_SUBDIR }}"
+
+      - name: Build
+        run: cmake --build build-aex --config Release --parallel
+
+      - name: Verify PE, exports and PiPL
+        shell: pwsh
+        run: |
+          python tools/verify_aex.py build-aex/bin/Release/XAO.aex `
+            --header ae/XAO_Ascii.h 2>&1 | Tee-Object -FilePath verify.txt
+          if ($LASTEXITCODE -ne 0) { throw "AEX verification failed" }
+
+      - name: Publish build report
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        env:
+          REPORT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $aex = "build-aex/bin/Release/XAO.aex"
+          $report = [ordered]@{
+            commit     = "${{ github.sha }}"
+            run_id     = "${{ github.run_id }}"
+            job        = "${{ job.status }}"
+            built_at   = (Get-Date).ToUniversalTime().ToString("o")
+            runner_os  = "$env:ImageOS"
+            aex_path   = $aex
+            aex_exists = (Test-Path $aex)
+          }
+          if (Test-Path $aex) {
+            $report.aex_bytes = (Get-Item $aex).Length
+            $report.aex_sha256 = (Get-FileHash $aex -Algorithm SHA256).Hash
+          }
+          if (Test-Path verify.txt) { $report.verify = (Get-Content verify.txt -Raw) }
+          $dir = Join-Path $env:RUNNER_TEMP "report"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Set-Content -Path "$dir/ae-build-report.json" -Encoding utf8 `
+            -Value ($report | ConvertTo-Json -Depth 4)
+          Push-Location $dir
+          git init -q
+          git config user.name "xao-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add ae-build-report.json
+          git commit -q -m "CI report for ${{ github.sha }}"
+          git push -q --force `
+            "https://x-access-token:$env:REPORT_TOKEN@github.com/${{ github.repository }}.git" `
+            HEAD:refs/heads/ci/ae-build-report
+          Pop-Location
 
       - uses: actions/upload-artifact@v4
         with:
           name: XAO-aex-win64
-          path: build-aex/**/XAO.aex
+          path: |
+            build-aex/bin/Release/XAO.aex
+            verify.txt
           if-no-files-found: error

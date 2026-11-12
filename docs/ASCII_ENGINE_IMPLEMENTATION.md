@@ -153,8 +153,10 @@ tools/xao_ascii_cli.cpp     offline renderer (PPM), used for comparisons
 tests/ascii_tests.cpp       129 behavioural checks
 tests/core_tests.cpp        (existing)
 ae/XAO_Ascii.{h,cpp}        After Effects host adapter
-ae/XAO_PiPL.r               PiPL resource
+ae/pipl_gen.py              binary PiPL generator (reads XAO_Ascii.h)
+ae/XAO_Ascii.{def,rc}       exports and VERSIONINFO
 ae/CMakeLists.txt           MSVC .aex build
+tools/verify_aex.py         PE/export/PiPL verifier (CI and local)
 Makefile                    core/tests/CLI build
 .github/workflows/ascii-engine.yml
 docs/ASCII_TYPOGRAPHY_FONTS.md
@@ -209,12 +211,13 @@ These are known deltas, not claims of pixel equality.
 
 ## 8. Limitations
 
-1. **No `.aex` was produced here.** Building one requires MSVC and the Adobe
-   After Effects SDK, neither of which exists in this environment; the SDK is
-   licensed by Adobe and is not in the repository. `ae/` contains the complete
-   adapter and `ae/CMakeLists.txt` the build; the CI job builds and verifies the
-   binary once `ae_sdk_path` is supplied. Until that runs, the host adapter is
-   **unverified against the SDK**.
+1. **The adapter is audited against real SDK headers, not run in After Effects.**
+   Every declaration the host adapter uses was checked against the After Effects
+   SDK headers kept in `extern/AfterEffectsSDK` of the reference repository, and
+   the adapter compiles cleanly against them. No `.aex` can be produced in this
+   authoring environment (no Windows, no MSVC): the `windows-aex` CI job builds
+   and verifies one from that pinned SDK checkout. Loading the plug-in inside
+   After Effects, and its parameter UI, have not been observed here.
 2. **Embedded fonts are the supplied ones.** Some of the supplied font files are
    proprietary or personal-use; embedding them into a distributed `.aex`
    requires confirming each licence. See `docs/ASCII_TYPOGRAPHY_FONTS.md`.

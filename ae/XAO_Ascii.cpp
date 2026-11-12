@@ -4,6 +4,21 @@
 // host adapter: parameter registration, pixel-format conversion and the render
 // entry point.
 //
+// Audited and corrected against the After Effects SDK headers in
+// vamprieieuu/Dithering_MAJEED_build_ready (extern/AfterEffectsSDK):
+//
+//  * PF_VERSION takes five arguments (vers, subvers, bugvers, stage, build).
+//  * Groups use PF_ADD_TOPIC / PF_END_TOPIC; this SDK has no PF_ADD_GROUP.
+//  * PF_ADD_SLIDER stores an integer in u.sd.value (PF_Param_FIX_SLIDER, which
+//    would use u.fd/u.fs_d, is a different parameter type entirely).
+//  * out_data->num_params must include the implicit input-layer parameter.
+//  * There is no PF_WORLD_IS_DEEP16.  8/16/32-bpc detection goes through
+//    PF_WorldSuite2::PF_GetPixelFormat, which is the SDK's declared API.
+//  * Iterate suites take (in_data, base, final, src, area, refcon, pix_fn, dst).
+//  * PF_OutData has no about_dialog_string; PF_Cmd_ABOUT fills return_msg.
+//  * There is no PF_OutFlag2_SUPPORTS_THREADED_RENDERING in this SDK; the
+//    declared flag is PF_OutFlag2_I_AM_THREADSAFE.
+//
 // Design notes that matter for stability:
 //  * No output extent is declared, so AE hands over the whole layer and the
 //    cell grid is always anchored to the layer, never to a render tile.
@@ -15,9 +30,8 @@
 #include "AE_Effect.h"
 #include "AE_EffectCB.h"
 #include "AE_EffectCBSuites.h"
-#include "AE_EffectSuites.h"
+#include "AE_EffectPixelFormat.h"
 #include "AE_Macros.h"
-#include "AE_AdvEffectSuites.h"
 #include "Param_Utils.h"
 
 #include "XAO_Ascii.h"
@@ -26,14 +40,27 @@
 #include "xao/ascii/Atlas.h"
 #include "xao/ascii/GlyphSets.h"
 
+#include <cstdio>
 #include <new>
 #include <string>
 
-#ifdef AE_OS_WIN
-    #define XAO_EXPORT extern "C" __declspec(dllexport)
-#else
-    #define XAO_EXPORT extern "C" __attribute__((visibility("default")))
-#endif
+// The PiPL is generated from these same numbers (ae/pipl_gen.py); these
+// assertions are what keeps the resource and GlobalSetup from drifting.
+static_assert(PF_VERSION(XAO_VERSION_MAJOR, XAO_VERSION_MINOR, XAO_VERSION_BUG,
+                         XAO_VERSION_STAGE, XAO_VERSION_BUILD) ==
+                  XAO_PIPL_EFFECT_VERSION,
+              "XAO_PIPL_EFFECT_VERSION must match PF_VERSION(...)");
+
+static_assert((PF_OutFlag_DEEP_COLOR_AWARE | PF_OutFlag_SEND_UPDATE_PARAMS_UI) ==
+                  XAO_PIPL_OUT_FLAGS,
+              "PiPL AE_Effect_Global_OutFlags must match GlobalSetup");
+
+static_assert((PF_OutFlag2_I_AM_THREADSAFE | PF_OutFlag2_FLOAT_COLOR_AWARE) ==
+                  XAO_PIPL_OUT_FLAGS2,
+              "PiPL AE_Effect_Global_OutFlags_2 must match GlobalSetup");
+
+static_assert(XAO_NUM_PARAMS == XAO_PARAM_ASCII_GROUP_END + 1,
+              "num_params must count slot 0 (the implicit layer) plus every id");
 
 namespace {
 
@@ -45,11 +72,13 @@ using xao::ascii::ScriptId;
 // ---------------------------------------------------------------------------
 
 int popupValue(PF_ParamDef* params[], int id) {
+    // PF_ADD_POPUP stores a 1-based choice index.
     return static_cast<int>(params[id]->u.pd.value) - 1;
 }
 
 float sliderValue(PF_ParamDef* params[], int id) {
-    return static_cast<float>(FIX_2_FLOAT(params[id]->u.fs_d.value));
+    // PF_ADD_SLIDER registers PF_Param_SLIDER: an integer in u.sd.value.
+    return static_cast<float>(params[id]->u.sd.value);
 }
 
 bool checkboxValue(PF_ParamDef* params[], int id) {
@@ -80,8 +109,56 @@ std::string faceMenu(ScriptId script) {
     return items.empty() ? std::string("Default") : items;
 }
 
+int faceMenuCount(ScriptId script) {
+    const int count = xao::ascii::faceCountForScript(script);
+    return count > 0 ? count : 1;
+}
+
+// ---------------------------------------------------------------------------
+// Suite access
+//
+// PF suites are acquired from the host's SPBasicSuite, which is already in
+// PF_InData.  Only two are needed, and both are released before returning.
+// ---------------------------------------------------------------------------
+
+template <typename Suite>
+Suite* acquirePFS(PF_InData* in_data, const char* name, int version) {
+    if (in_data == nullptr || in_data->pica_basicP == nullptr) return nullptr;
+    const void* suite = nullptr;
+    if (in_data->pica_basicP->AcquireSuite(name, version, &suite) != 0) {
+        return nullptr;
+    }
+    return const_cast<Suite*>(static_cast<const Suite*>(suite));
+}
+
+void releasePFS(PF_InData* in_data, const char* name, int version) {
+    if (in_data != nullptr && in_data->pica_basicP != nullptr) {
+        in_data->pica_basicP->ReleaseSuite(name, version);
+    }
+}
+
+// 8/16/32-bpc detection.  The SDK has no PF_WORLD_IS_DEEP16 (only
+// PF_WORLD_IS_DEEP for 32-bpc float), so the declared pixel-format query is the
+// only reliable way to tell 8-bit from 16-bit.
+PF_Err pixelFormatOf(PF_InData* in_data, const PF_EffectWorld* world,
+                     PF_PixelFormat* format) {
+    if (format == nullptr) return PF_Err_BAD_CALLBACK_PARAM;
+    *format = PF_PixelFormat_INVALID;
+    PF_WorldSuite2* suite =
+        acquirePFS<PF_WorldSuite2>(in_data, kPFWorldSuite, kPFWorldSuiteVersion2);
+    if (suite == nullptr) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+    const PF_Err err = suite->PF_GetPixelFormat(world, format);
+    releasePFS(in_data, kPFWorldSuite, kPFWorldSuiteVersion2);
+    return err;
+}
+
 // ---------------------------------------------------------------------------
 // Pixel conversion
+//
+// The core works in normalised RGBA floats (1.0 == white) and the presets were
+// designed and validated against that convention, so the adapter scales channel
+// values and nothing else.  Values are not premultiplied or gamma-converted
+// here; doing so would change the approved look of every preset.
 // ---------------------------------------------------------------------------
 
 struct ReadContext {
@@ -91,23 +168,24 @@ struct ReadContext {
 PF_Err readPixel8(void* refcon, A_long x, A_long y, PF_Pixel* in, PF_Pixel* out) {
     ReadContext* ctx = static_cast<ReadContext*>(refcon);
     xao::Pixel& p = ctx->image->at(static_cast<int>(x), static_cast<int>(y));
-    p.a = in->alpha / 255.0f;
-    p.r = in->red / 255.0f;
-    p.g = in->green / 255.0f;
-    p.b = in->blue / 255.0f;
-    if (out != nullptr) *out = *in;
+    const float scale = 1.0f / 255.0f;
+    p.a = in->alpha * scale;
+    p.r = in->red * scale;
+    p.g = in->green * scale;
+    p.b = in->blue * scale;
+    (void)out;
     return PF_Err_NONE;
 }
 
 PF_Err readPixel16(void* refcon, A_long x, A_long y, PF_Pixel16* in, PF_Pixel16* out) {
     ReadContext* ctx = static_cast<ReadContext*>(refcon);
     xao::Pixel& p = ctx->image->at(static_cast<int>(x), static_cast<int>(y));
-    const float scale = 1.0f / 32768.0f;
-    p.a = in->alpha / 32768.0f;
+    const float scale = 1.0f / static_cast<float>(PF_MAX_CHAN16);
+    p.a = in->alpha * scale;
     p.r = in->red * scale;
     p.g = in->green * scale;
     p.b = in->blue * scale;
-    if (out != nullptr) *out = *in;
+    (void)out;
     return PF_Err_NONE;
 }
 
@@ -119,7 +197,7 @@ PF_Err readPixelFloat(void* refcon, A_long x, A_long y, PF_PixelFloat* in,
     p.r = in->red;
     p.g = in->green;
     p.b = in->blue;
-    if (out != nullptr) *out = *in;
+    (void)out;
     return PF_Err_NONE;
 }
 
@@ -141,10 +219,11 @@ PF_Err writePixel8(void* refcon, A_long x, A_long y, PF_Pixel* in, PF_Pixel* out
 PF_Err writePixel16(void* refcon, A_long x, A_long y, PF_Pixel16* in, PF_Pixel16* out) {
     const WriteContext* ctx = static_cast<const WriteContext*>(refcon);
     const xao::Pixel& p = ctx->image->at(static_cast<int>(x), static_cast<int>(y));
-    out->alpha = static_cast<A_u_short>(p.a * 32768.0f + 0.5f);
-    out->red = static_cast<A_u_short>(p.r * 32768.0f + 0.5f);
-    out->green = static_cast<A_u_short>(p.g * 32768.0f + 0.5f);
-    out->blue = static_cast<A_u_short>(p.b * 32768.0f + 0.5f);
+    const float scale = static_cast<float>(PF_MAX_CHAN16);
+    out->alpha = static_cast<A_u_short>(p.a * scale + 0.5f);
+    out->red = static_cast<A_u_short>(p.r * scale + 0.5f);
+    out->green = static_cast<A_u_short>(p.g * scale + 0.5f);
+    out->blue = static_cast<A_u_short>(p.b * scale + 0.5f);
     (void)in;
     return PF_Err_NONE;
 }
@@ -166,41 +245,46 @@ PF_Err writePixelFloat(void* refcon, A_long x, A_long y, PF_PixelFloat* in,
 // ---------------------------------------------------------------------------
 
 PF_Err About(PF_InData* in_data, PF_OutData* out_data) {
-    AEGP_SuiteHandler suites(in_data->pica_basicP);
-    suites.ANSICallSuite3()->ansi_CRLF_string(
-        in_data->pica_basicP,
-        "XAO ASCII\r"
-        "Unified ASCII engine: nine render presets, embedded fonts,\r"
-        "Arabic shaping, English and ancient glyph systems.\r",
-        &out_data->about_dialog_string);
+    // PF_OutData has no about dialog string member in this SDK; PF_Cmd_ABOUT is
+    // answered through return_msg.
+    std::snprintf(out_data->return_msg, sizeof(out_data->return_msg),
+                  "%s %d.%d.%d (build %d)\r"
+                  "Unified ASCII engine: nine render presets, embedded fonts, "
+                  "Arabic shaping, English and ancient glyph systems.",
+                  XAO_ASCII_NAME, XAO_VERSION_MAJOR, XAO_VERSION_MINOR,
+                  XAO_VERSION_BUG, XAO_VERSION_BUILD);
+    (void)in_data;
     return PF_Err_NONE;
 }
 
 PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data) {
     out_data->my_version = PF_VERSION(XAO_VERSION_MAJOR, XAO_VERSION_MINOR,
-                                      XAO_VERSION_STAGE, XAO_VERSION_BUILD);
+                                      XAO_VERSION_BUG, XAO_VERSION_STAGE,
+                                      XAO_VERSION_BUILD);
+
+    // Must match XAO_PIPL_OUT_FLAGS / XAO_PIPL_OUT_FLAGS2 (asserted above).
     out_data->out_flags = PF_OutFlag_DEEP_COLOR_AWARE |
                           PF_OutFlag_SEND_UPDATE_PARAMS_UI;
-    out_data->out_flags2 = PF_OutFlag2_SUPPORTS_THREADED_RENDERING |
+    out_data->out_flags2 = PF_OutFlag2_I_AM_THREADSAFE |
                            PF_OutFlag2_FLOAT_COLOR_AWARE;
     (void)in_data;
     return PF_Err_NONE;
 }
 
 PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[]) {
-    PF_Err err = PF_Err_NONE;
     PF_ParamDef def;
+
     const std::string englishFonts = faceMenu(ScriptId::English);
     const std::string arabicFonts = faceMenu(ScriptId::Arabic);
     const std::string ancientFonts = faceMenu(ScriptId::Ancient);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_START, "ASCII", XAO_PARAM_ASCII_GROUP);
+    PF_ADD_TOPIC("ASCII", XAO_PARAM_ASCII_GROUP);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_POPUP("Preset", xao::ascii::presetCount(),
                  static_cast<int>(xao::ascii::Preset::Default) + 1,
-                 kPresetItems, XAO_PARAM_PRESET);
+                 const_cast<char*>(kPresetItems), XAO_PARAM_PRESET);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_SLIDER("ASCII Cells", 2, 200, 2, 200, 16, XAO_PARAM_CELLS);
@@ -216,7 +300,7 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_POPUP("Character Set", static_cast<int>(xao::ascii::Charset::Count),
-                 1, kCharsetItems, XAO_PARAM_CHARSET);
+                 1, const_cast<char*>(kCharsetItems), XAO_PARAM_CHARSET);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_CHECKBOX("Enable Character Size", "", TRUE, 0,
@@ -243,7 +327,7 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_POPUP("Color Palette", static_cast<int>(xao::ascii::Palette::Count),
-                 1, kPaletteItems, XAO_PARAM_PALETTE);
+                 1, const_cast<char*>(kPaletteItems), XAO_PARAM_PALETTE);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_SLIDER("Palette Strength", 0, 100, 0, 100, 0,
@@ -251,7 +335,7 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params
 
     // --- Random (inside ASCII, directly below the main controls) -----------
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_START, "Random", XAO_PARAM_RANDOM_GROUP);
+    PF_ADD_TOPIC("Random", XAO_PARAM_RANDOM_GROUP);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_CHECKBOX("Random Characters", "", TRUE, 0, XAO_PARAM_RANDOM_CHARS);
@@ -266,11 +350,11 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params
     PF_ADD_SLIDER("Random Seed", 0, 100000, 0, 100000, 1234, XAO_PARAM_SEED);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_END, "Random", XAO_PARAM_RANDOM_GROUP_END);
+    PF_END_TOPIC(XAO_PARAM_RANDOM_GROUP_END);
 
     // --- English ----------------------------------------------------------
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_START, "English", XAO_PARAM_ENGLISH_GROUP);
+    PF_ADD_TOPIC("English", XAO_PARAM_ENGLISH_GROUP);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_CHECKBOX("English Letters", "", TRUE, 0, XAO_PARAM_ENGLISH_LETTERS);
@@ -282,16 +366,16 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params
     PF_ADD_CHECKBOX("English Words", "", FALSE, 0, XAO_PARAM_ENGLISH_WORDS);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP("English Font",
-                 static_cast<int>(xao::ascii::faceCountForScript(ScriptId::English)),
-                 1, englishFonts.c_str(), XAO_PARAM_ENGLISH_FONT);
+    PF_ADD_POPUP("English Font", faceMenuCount(ScriptId::English), 1,
+                 const_cast<char*>(englishFonts.c_str()),
+                 XAO_PARAM_ENGLISH_FONT);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_END, "English", XAO_PARAM_ENGLISH_GROUP_END);
+    PF_END_TOPIC(XAO_PARAM_ENGLISH_GROUP_END);
 
     // --- Arabic -----------------------------------------------------------
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_START, "Arabic", XAO_PARAM_ARABIC_GROUP);
+    PF_ADD_TOPIC("Arabic", XAO_PARAM_ARABIC_GROUP);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_CHECKBOX("Arabic Letters", "", FALSE, 0, XAO_PARAM_ARABIC_LETTERS);
@@ -303,16 +387,15 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params
     PF_ADD_CHECKBOX("Arabic Words", "", FALSE, 0, XAO_PARAM_ARABIC_WORDS);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP("Arabic Font",
-                 static_cast<int>(xao::ascii::faceCountForScript(ScriptId::Arabic)),
-                 1, arabicFonts.c_str(), XAO_PARAM_ARABIC_FONT);
+    PF_ADD_POPUP("Arabic Font", faceMenuCount(ScriptId::Arabic), 1,
+                 const_cast<char*>(arabicFonts.c_str()), XAO_PARAM_ARABIC_FONT);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_END, "Arabic", XAO_PARAM_ARABIC_GROUP_END);
+    PF_END_TOPIC(XAO_PARAM_ARABIC_GROUP_END);
 
     // --- Ancient ----------------------------------------------------------
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_START, "Ancient", XAO_PARAM_ANCIENT_GROUP);
+    PF_ADD_TOPIC("Ancient", XAO_PARAM_ANCIENT_GROUP);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_CHECKBOX("Ancient Letters", "", FALSE, 0, XAO_PARAM_ANCIENT_LETTERS);
@@ -324,20 +407,20 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params
     PF_ADD_CHECKBOX("Ancient Words", "", FALSE, 0, XAO_PARAM_ANCIENT_WORDS);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP("Ancient Font",
-                 static_cast<int>(xao::ascii::faceCountForScript(ScriptId::Ancient)),
-                 1, ancientFonts.c_str(), XAO_PARAM_ANCIENT_FONT);
+    PF_ADD_POPUP("Ancient Font", faceMenuCount(ScriptId::Ancient), 1,
+                 const_cast<char*>(ancientFonts.c_str()), XAO_PARAM_ANCIENT_FONT);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_END, "Ancient", XAO_PARAM_ANCIENT_GROUP_END);
+    PF_END_TOPIC(XAO_PARAM_ANCIENT_GROUP_END);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_GROUP(PF_GROUP_END, "ASCII", XAO_PARAM_ASCII_GROUP_END);
+    PF_END_TOPIC(XAO_PARAM_ASCII_GROUP_END);
 
+    // Slot 0 is AE's implicit input layer, so the count is last id + 1.
     out_data->num_params = XAO_NUM_PARAMS;
     (void)in_data;
     (void)params;
-    return err;
+    return PF_Err_NONE;
 }
 
 AsciiParams readParams(PF_ParamDef* params[]) {
@@ -399,13 +482,14 @@ AsciiParams readParams(PF_ParamDef* params[]) {
 PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
               PF_LayerDef* output) {
     PF_Err err = PF_Err_NONE;
-    AEGP_SuiteHandler suites(in_data->pica_basicP);
+
+    if (output == nullptr) return PF_Err_BAD_CALLBACK_PARAM;
 
     const AsciiParams asciiParams = readParams(params);
     PF_LayerDef* input = &params[0]->u.ld;
 
-    const int width = output->width;
-    const int height = output->height;
+    const int width = static_cast<int>(output->width);
+    const int height = static_cast<int>(output->height);
     if (width <= 0 || height <= 0) return PF_Err_NONE;
 
     xao::Image source(width, height);
@@ -413,29 +497,45 @@ PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
 
     ReadContext readCtx;
     readCtx.image = &source;
+    WriteContext writeCtx;
+    writeCtx.image = &destination;
 
-    if (PF_WORLD_IS_DEEP(output)) {
-        if (output->rowbytes >= static_cast<A_long>(width) * 16) {
-            err = suites.IterateFloatSuite1()->iterate(
-                in_data, 0, height, input, &readCtx,
-                reinterpret_cast<PF_Err (*)(void*, A_long, A_long, PF_PixelFloat*,
-                                            PF_PixelFloat*)>(readPixelFloat),
-                nullptr);
-        } else {
-            err = PF_Err_BAD_CALLBACK_PARAM;
+    PF_PixelFormat format = PF_PixelFormat_INVALID;
+    err = pixelFormatOf(in_data, output, &format);
+    if (err != PF_Err_NONE) return err;
+
+    // Pass 1: copy the host's pixels into normalised floats.
+    // Pass 2: write the rendered floats back.  Both passes iterate src=input
+    // into dst=output, so no NULL destination is ever passed to the host.
+    switch (format) {
+        case PF_PixelFormat_ARGB64:
+            err = PF_ITERATE16(0, height, input, nullptr, &readCtx, readPixel16, output);
+            if (err == PF_Err_NONE) {
+                err = PF_ITERATE16(0, height, input, nullptr, &writeCtx, writePixel16, output);
+            }
+            break;
+
+        case PF_PixelFormat_ARGB128: {
+            PF_IterateFloatSuite1* suite = acquirePFS<PF_IterateFloatSuite1>(
+                in_data, kPFIterateFloatSuite, kPFIterateFloatSuiteVersion1);
+            if (suite == nullptr) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+            err = suite->iterate(in_data, 0, height, input, nullptr, &readCtx,
+                                 readPixelFloat, output);
+            if (err == PF_Err_NONE) {
+                err = suite->iterate(in_data, 0, height, input, nullptr, &writeCtx,
+                                     writePixelFloat, output);
+            }
+            releasePFS(in_data, kPFIterateFloatSuite, kPFIterateFloatSuiteVersion1);
+            break;
         }
-    } else if (PF_WORLD_IS_DEEP16(output)) {
-        err = suites.Iterate16Suite1()->iterate(
-            in_data, 0, height, input, &readCtx,
-            reinterpret_cast<PF_Err (*)(void*, A_long, A_long, PF_Pixel16*,
-                                        PF_Pixel16*)>(readPixel16),
-            nullptr);
-    } else {
-        err = suites.Iterate8Suite1()->iterate(
-            in_data, 0, height, input, &readCtx,
-            reinterpret_cast<PF_Err (*)(void*, A_long, A_long, PF_Pixel*,
-                                        PF_Pixel*)>(readPixel8),
-            nullptr);
+
+        case PF_PixelFormat_ARGB32:
+        default:
+            err = PF_ITERATE(0, height, input, nullptr, &readCtx, readPixel8, output);
+            if (err == PF_Err_NONE) {
+                err = PF_ITERATE(0, height, input, nullptr, &writeCtx, writePixel8, output);
+            }
+            break;
     }
     if (err != PF_Err_NONE) return err;
 
@@ -450,31 +550,8 @@ PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
 
     xao::ascii::renderAscii(source, destination, context, asciiParams);
 
-    WriteContext writeCtx;
-    writeCtx.image = &destination;
-
-    if (PF_WORLD_IS_DEEP(output)) {
-        err = suites.IterateFloatSuite1()->iterate(
-            in_data, 0, height, output, &writeCtx,
-            reinterpret_cast<PF_Err (*)(void*, A_long, A_long, PF_PixelFloat*,
-                                        PF_PixelFloat*)>(writePixelFloat),
-            output);
-    } else if (PF_WORLD_IS_DEEP16(output)) {
-        err = suites.Iterate16Suite1()->iterate(
-            in_data, 0, height, output, &writeCtx,
-            reinterpret_cast<PF_Err (*)(void*, A_long, A_long, PF_Pixel16*,
-                                        PF_Pixel16*)>(writePixel16),
-            output);
-    } else {
-        err = suites.Iterate8Suite1()->iterate(
-            in_data, 0, height, output, &writeCtx,
-            reinterpret_cast<PF_Err (*)(void*, A_long, A_long, PF_Pixel*,
-                                        PF_Pixel*)>(writePixel8),
-            output);
-    }
-
     (void)out_data;
-    return err;
+    return PF_Err_NONE;
 }
 
 PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data,
@@ -488,11 +565,21 @@ PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data,
     return PF_Err_NONE;
 }
 
+PF_Err UpdateParamsUi(PF_InData* in_data, PF_OutData* out_data,
+                      PF_ParamDef* params[]) {
+    (void)in_data;
+    (void)params;
+    out_data->out_flags |= PF_OutFlag_REFRESH_UI;
+    return PF_Err_NONE;
+}
+
 } // namespace
 
-XAO_EXPORT PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_data,
-                             PF_ParamDef* params[], PF_LayerDef* output,
-                             void* extra) {
+extern "C" __declspec(dllexport) PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data,
+                                                   PF_OutData* out_data,
+                                                   PF_ParamDef* params[],
+                                                   PF_LayerDef* output,
+                                                   void* extra) {
     PF_Err err = PF_Err_NONE;
     try {
         switch (cmd) {
@@ -512,6 +599,9 @@ XAO_EXPORT PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_dat
                 err = UserChangedParam(
                     in_data, out_data, params,
                     reinterpret_cast<const PF_UserChangedParamExtra*>(extra));
+                break;
+            case PF_Cmd_UPDATE_PARAMS_UI:
+                err = UpdateParamsUi(in_data, out_data, params);
                 break;
             case PF_Cmd_SEQUENCE_SETUP:
             case PF_Cmd_SEQUENCE_RESETUP:
