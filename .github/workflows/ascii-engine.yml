@@ -47,6 +47,8 @@ jobs:
   windows-aex:
     name: Windows x64 AEX build (MSVC)
     runs-on: windows-latest
+    # A green AEX build therefore implies the Linux regression suite passed.
+    needs: core-tests
     permissions:
       contents: write   # only to publish the build report branch
     steps:
