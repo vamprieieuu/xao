@@ -140,12 +140,21 @@ class PE:
                 if target & 0x80000000:
                     walk(target & 0x7FFFFFFF, path + [key])
                     continue
+                # Some linkers leave an unused trailing entry whose offset is
+                # not a real data entry (MSVC does).  Ignore anything that does
+                # not point inside the resource section instead of aborting the
+                # whole walk.
+                if target >= size:
+                    if debug:
+                        print("    ... skipped: offset 0x%x outside resource "
+                              "section (0x%x bytes)" % (target, size))
+                    continue
                 data_offset = root + target
                 if data_offset + 8 > len(self.data):
-                    # Not fatal: the caller falls back to locating the PiPL by
-                    # its property header.
-                    raise ValueError("resource data entry at 0x%x is outside "
-                                     "the file" % data_offset)
+                    if debug:
+                        print("    ... skipped: data entry 0x%x outside the file"
+                              % data_offset)
+                    continue
                 found[tuple(path + [key])] = (u32(self.data, data_offset),
                                              u32(self.data, data_offset + 4))
 
