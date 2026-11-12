@@ -55,7 +55,7 @@ static_assert((PF_OutFlag_DEEP_COLOR_AWARE | PF_OutFlag_SEND_UPDATE_PARAMS_UI) =
                   XAO_PIPL_OUT_FLAGS,
               "PiPL AE_Effect_Global_OutFlags must match GlobalSetup");
 
-static_assert((PF_OutFlag2_I_AM_THREADSAFE | PF_OutFlag2_FLOAT_COLOR_AWARE) ==
+static_assert(PF_OutFlag2_I_AM_THREADSAFE ==
                   XAO_PIPL_OUT_FLAGS2,
               "PiPL AE_Effect_Global_OutFlags_2 must match GlobalSetup");
 
