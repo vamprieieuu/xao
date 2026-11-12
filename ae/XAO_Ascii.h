@@ -36,7 +36,7 @@
 //   PF_OutFlag2_FLOAT_COLOR_AWARE      (1 << 12)
 // XAO_Ascii.cpp holds static_asserts for both.
 #define XAO_PIPL_OUT_FLAGS  0x06000000
-#define XAO_PIPL_OUT_FLAGS2 0x00001010
+#define XAO_PIPL_OUT_FLAGS2 0x00000010
 
 // AE_PiPL_Version and AE_Effect_Spec_Version entries of the PiPL.
 #define XAO_PIPL_VERSION_MAJOR 2
