@@ -483,9 +483,9 @@ AsciiParams readParams(PF_ParamDef* params[]) {
 
 PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
               PF_LayerDef* output) {
-    PF_Err err = PF_Err_NONE;
-
-    if (output == nullptr) return PF_Err_BAD_CALLBACK_PARAM;
+    if (output == nullptr || params == nullptr || params[0] == nullptr) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
 
     const AsciiParams asciiParams = readParams(params);
     PF_LayerDef* input = &params[0]->u.ld;
@@ -493,28 +493,28 @@ PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
     const int width = static_cast<int>(output->width);
     const int height = static_cast<int>(output->height);
     if (width <= 0 || height <= 0) return PF_Err_NONE;
+    if (input->data == nullptr || output->data == nullptr) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
 
     xao::Image source(width, height);
     xao::Image destination(width, height);
+
+    PF_PixelFormat format = PF_PixelFormat_INVALID;
+    PF_Err err = pixelFormatOf(in_data, input, &format);
+    if (err != PF_Err_NONE) return err;
 
     ReadContext readCtx;
     readCtx.image = &source;
     WriteContext writeCtx;
     writeCtx.image = &destination;
 
-    PF_PixelFormat format = PF_PixelFormat_INVALID;
-    err = pixelFormatOf(in_data, output, &format);
-    if (err != PF_Err_NONE) return err;
-
-    // Pass 1: copy the host's pixels into normalised floats.
-    // Pass 2: write the rendered floats back.  Both passes iterate src=input
-    // into dst=output, so no NULL destination is ever passed to the host.
+    // Pass 1: read the original input into the CPU image. Do not write the
+    // still-empty destination image to the AE output world here.
     switch (format) {
         case PF_PixelFormat_ARGB64:
-            err = PF_ITERATE16(0, height, input, nullptr, &readCtx, readPixel16, output);
-            if (err == PF_Err_NONE) {
-                err = PF_ITERATE16(0, height, input, nullptr, &writeCtx, writePixel16, output);
-            }
+            err = PF_ITERATE16(0, height, input, nullptr, &readCtx,
+                              readPixel16, output);
             break;
 
         case PF_PixelFormat_ARGB128: {
@@ -523,24 +523,22 @@ PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
             if (suite == nullptr) return PF_Err_INTERNAL_STRUCT_DAMAGED;
             err = suite->iterate(in_data, 0, height, input, nullptr, &readCtx,
                                  readPixelFloat, output);
-            if (err == PF_Err_NONE) {
-                err = suite->iterate(in_data, 0, height, input, nullptr, &writeCtx,
-                                     writePixelFloat, output);
-            }
             releasePFS(in_data, kPFIterateFloatSuite, kPFIterateFloatSuiteVersion1);
             break;
         }
 
         case PF_PixelFormat_ARGB32:
         default:
-            err = PF_ITERATE(0, height, input, nullptr, &readCtx, readPixel8, output);
-            if (err == PF_Err_NONE) {
-                err = PF_ITERATE(0, height, input, nullptr, &writeCtx, writePixel8, output);
-            }
+            err = PF_ITERATE(0, height, input, nullptr, &readCtx,
+                             readPixel8, output);
             break;
     }
     if (err != PF_Err_NONE) return err;
 
+    // Render before touching the final output. The previous adapter wrote the
+    // zero-initialized destination image to output and only rendered it after
+    // that write, which left the layer black. Keep the host write as the final
+    // operation so the rendered pixels are what AE actually receives.
     xao::RenderContext context;
     context.timeSeconds = in_data->time_scale > 0
                               ? static_cast<double>(in_data->current_time) /
@@ -552,8 +550,32 @@ PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
 
     xao::ascii::renderAscii(source, destination, context, asciiParams);
 
+    // Pass 2: write the completed render to AE's output world.
+    switch (format) {
+        case PF_PixelFormat_ARGB64:
+            err = PF_ITERATE16(0, height, input, nullptr, &writeCtx,
+                              writePixel16, output);
+            break;
+
+        case PF_PixelFormat_ARGB128: {
+            PF_IterateFloatSuite1* suite = acquirePFS<PF_IterateFloatSuite1>(
+                in_data, kPFIterateFloatSuite, kPFIterateFloatSuiteVersion1);
+            if (suite == nullptr) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+            err = suite->iterate(in_data, 0, height, input, nullptr, &writeCtx,
+                                 writePixelFloat, output);
+            releasePFS(in_data, kPFIterateFloatSuite, kPFIterateFloatSuiteVersion1);
+            break;
+        }
+
+        case PF_PixelFormat_ARGB32:
+        default:
+            err = PF_ITERATE(0, height, input, nullptr, &writeCtx,
+                             writePixel8, output);
+            break;
+    }
+
     (void)out_data;
-    return PF_Err_NONE;
+    return err;
 }
 
 PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data,
