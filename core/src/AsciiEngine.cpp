@@ -220,6 +220,7 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    const Pixel& original=src.row(y)[x];float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;
    float mask=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0.0f;
    Pixel base=original;
+   if(params_.paletteIndex>0&&params_.paletteIndex<=kS1PaletteCount){const float paperMix=clamp01(params_.asciiAmount/100.0f)*clamp01(params_.asciiStrength/100.0f);base.r=original.r*(1.0f-paperMix)+params_.paper.r*paperMix;base.g=original.g*(1.0f-paperMix)+params_.paper.g*paperMix;base.b=original.b*(1.0f-paperMix)+params_.paper.b*paperMix;}
    if(params_.visualStyle==AsciiVisualStyle::Liquid){
     const float radius=std::max(1.0f,std::min(cw,ch)*0.18f),lx=(float)(x-x0)+0.5f,ly=(float)(y-y0)+0.5f;
     const float qx=std::max(radius-lx,std::max(0.0f,lx-(cw-radius))),qy=std::max(radius-ly,std::max(0.0f,ly-(ch-radius)));
