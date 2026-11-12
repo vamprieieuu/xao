@@ -213,7 +213,7 @@ def describe(props):
     print("name:       %s / %s (match '%s')" % (
         pascal(props["eman"]), pascal(props["gtac"]), pascal(props["ANMe"])))
     print("spec:       %d.%d" % struct.unpack("<HH", props["RVSe"]))
-    print("version:    0x%08x" % struct.unpack(">I", props["REVe"])[0])
+    print("version:    0x%08x" % struct.unpack("<I", props["REVe"])[0])
     print("out flags:  0x%08x / 0x%08x" % (out_flags, out_flags2))
     return out_flags, out_flags2
 
