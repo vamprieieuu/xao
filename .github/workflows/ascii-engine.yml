@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - xao/ascii-pipl-smartfx-fix-2026-11-12
+      - xao/fix-render-black-startup-script-2026-11-12
   workflow_dispatch:
 
 permissions:
