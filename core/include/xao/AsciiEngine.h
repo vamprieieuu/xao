@@ -99,7 +99,7 @@ struct AsciiParams {
  float thresholdLevel=0.12f;
  int thresholdSegmentWidth=32;
  int thresholdRowSpacing=8;
- int panelMinWidth=2, panelMaxWidth=5, panelMinHeight=1, panelMaxHeight=2;
+ int panelMinWidth=1, panelMaxWidth=3, panelMinHeight=1, panelMaxHeight=2;
  Pixel tintColor{1,1,1,1};
  Pixel ink{1,1,1,1};
  Pixel paper{0,0,0,0};
