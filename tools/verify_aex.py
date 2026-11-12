@@ -242,7 +242,7 @@ def check_pipl_metadata(props, header_path):
     need(out_flags2 == read_int(header, "XAO_PIPL_OUT_FLAGS2"),
          "PiPL out_flags2 0x%08x != XAO_PIPL_OUT_FLAGS2 0x%08x"
          % (out_flags2, read_int(header, "XAO_PIPL_OUT_FLAGS2")))
-    version = struct.unpack(">I", props["REVe"])[0]
+    version = struct.unpack("<I", props["REVe"])[0]
     need(version == read_int(header, "XAO_PIPL_EFFECT_VERSION"),
          "PiPL version 0x%08x != XAO_PIPL_EFFECT_VERSION 0x%08x"
          % (version, read_int(header, "XAO_PIPL_EFFECT_VERSION")))
