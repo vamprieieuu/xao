@@ -16,10 +16,14 @@ jobs:
     steps:
       - name: Checkout XAO
         uses: actions/checkout@v4
-      - name: Set up Visual Studio 2022 x64
+      - name: Set up MSVC x64 (MAJEED build environment)
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Checkout the exact MAJEED Adobe SDK
         uses: actions/checkout@v4
         with:
@@ -27,39 +31,50 @@ jobs:
           ref: ea1f39e974daccd11bec2c3802c9e424f26afdc6
           path: .ae-sdk
           persist-credentials: false
-      - name: Validate SDK files
+      - name: Validate Adobe SDK layout
         shell: pwsh
         run: |
           $sdk = Join-Path $env:GITHUB_WORKSPACE '.ae-sdk/extern/AfterEffectsSDK'
-          foreach ($f in 'CMakeLists.txt','Headers/AE_Effect.h','Util/Param_Utils.h','Resources/PiPLtool.exe') {
+          foreach ($f in 'CMakeLists.txt','Headers/AE_Effect.h','Util/Param_Utils.h') {
             if (-not (Test-Path (Join-Path $sdk $f))) { throw "Missing Adobe SDK file: $f" }
           }
-      - name: Configure x64 AEX
+      - name: Clean build output
+        shell: pwsh
+        run: |
+          if (Test-Path build-aex) { Remove-Item build-aex -Recurse -Force }
+      - name: Configure CMake (same as MAJEED)
         shell: pwsh
         run: |
           cmake -S ae -B build-aex -G 'Visual Studio 17 2022' -A x64 -DAE_SDK_PATH="$env:GITHUB_WORKSPACE/.ae-sdk/extern/AfterEffectsSDK"
           if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
-      - name: Build XAO.aex
+      - name: Build XAO_ASCII
         shell: pwsh
         run: |
           cmake --build build-aex --config Release --target XAO_ASCII --parallel
-          if ($LASTEXITCODE -ne 0) { throw 'AEX build failed' }
-      - name: Verify the exact AEX output
+          if ($LASTEXITCODE -ne 0) { throw 'XAO AEX build failed' }
+      - name: Verify the one final AEX file
         shell: pwsh
         run: |
-          $aex = 'build-aex/bin/Release/XAO.aex'
-          if (-not (Test-Path $aex -PathType Leaf)) { throw "Expected AEX file missing: $aex" }
+          $aex = 'build-aex/dist/XAO.aex'
+          if (-not (Test-Path $aex -PathType Leaf)) { throw "XAO.aex was not produced: $aex" }
           if ((Get-Item $aex).Length -lt 10000) { throw 'XAO.aex is unexpectedly small' }
           python tools/verify_aex.py $aex --header ae/XAO_Ascii.h --debug
-          if ($LASTEXITCODE -ne 0) { throw 'AEX verification failed' }
-          Write-Host "READY: $((Resolve-Path $aex).Path)"
-          Write-Host "SIZE: $((Get-Item $aex).Length) bytes"
-          Write-Host "SHA256: $((Get-FileHash $aex -Algorithm SHA256).Hash)"
+          if ($LASTEXITCODE -ne 0) { throw 'XAO.aex verification failed' }
+          $file = Get-Item $aex
+          $hash = (Get-FileHash $aex -Algorithm SHA256).Hash
+          Write-Host "AEX: $($file.FullName)"
+          Write-Host "SIZE: $($file.Length) bytes"
+          Write-Host "SHA256: $hash"
+          if ($env:GITHUB_STEP_SUMMARY) {
+            Add-Content $env:GITHUB_STEP_SUMMARY '### XAO ASCII build succeeded'
+            Add-Content $env:GITHUB_STEP_SUMMARY '- Output: XAO.aex'
+            Add-Content $env:GITHUB_STEP_SUMMARY ("- Size: {0} bytes" -f $file.Length)
+            Add-Content $env:GITHUB_STEP_SUMMARY ("- SHA-256: {0}" -f $hash)
+          }
       - name: Upload only XAO.aex
         uses: actions/upload-artifact@v4
         with:
           name: XAO.aex
-          path: build-aex/bin/Release/XAO.aex
+          path: build-aex/dist/XAO.aex
           if-no-files-found: error
           compression-level: 0
-          include-hidden-files: false
