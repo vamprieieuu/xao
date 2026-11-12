@@ -1,83 +1,48 @@
 cmake_minimum_required(VERSION 3.20)
-project(XAO_ASCII LANGUAGES C CXX)
+
+project(XAO_ASCII LANGUAGES C CXX RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 
 if(NOT WIN32)
-    message(FATAL_ERROR "XAO ASCII AEX build requires Windows/MSVC.")
+    message(FATAL_ERROR "XAO ASCII AEX build requires Windows x64 MSVC.")
 endif()
 
-# Match the proven Dithering MAJEED build: compile Adobe's SDK support library
-# and use Adobe's PiPLtool.exe + cl.exe preprocessing pipeline.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 if(NOT DEFINED AE_SDK_PATH)
-    message(FATAL_ERROR "AE_SDK_PATH must point to the AfterEffectsSDK root.")
+    message(FATAL_ERROR "AE_SDK_PATH must point to the pinned After Effects SDK root.")
 endif()
 get_filename_component(AE_SDK_PATH "${AE_SDK_PATH}" ABSOLUTE)
 if(NOT EXISTS "${AE_SDK_PATH}/CMakeLists.txt")
     message(FATAL_ERROR "After Effects SDK CMakeLists.txt not found: ${AE_SDK_PATH}")
 endif()
+
+# Exact SDK CMake integration used by the known-good Dithering MAJEED project.
 add_subdirectory("${AE_SDK_PATH}" "${CMAKE_CURRENT_BINARY_DIR}/extern/AfterEffectsSDK")
 
 set(XAO_AE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(XAO_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../core")
-set(PIPL_R "${XAO_AE_DIR}/XAO_PiPL.r")
-set(PIPL_RR "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.rr")
-set(PIPL_RRC "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.rrc")
-set(PIPL_RC "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.generated.rc")
-set(PIPL_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/GenerateXAOPiPL.cmd")
-set(PIPLTOOL "${AE_SDK_PATH}/Resources/PiPLtool.exe")
+set(PIPL_BIN "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.bin")
+set(PIPL_RC "${CMAKE_CURRENT_BINARY_DIR}/XAO_PiPL.rc")
+set(PIPL_PY "${XAO_AE_DIR}/pipl_gen.py")
 
-if(NOT EXISTS "${PIPL_R}")
-    message(FATAL_ERROR "PiPL source not found: ${PIPL_R}")
-endif()
-if(NOT EXISTS "${PIPLTOOL}")
-    message(FATAL_ERROR "Adobe PiPLtool.exe not found: ${PIPLTOOL}")
+if(NOT EXISTS "${PIPL_PY}")
+    message(FATAL_ERROR "PiPL generator not found: ${PIPL_PY}")
 endif()
 
-# Same three-step Adobe SDK sequence used by the known-good MAJEED project:
-# cl /EP .r -> .rr; PiPLtool .rr -> .rrc; cl /D MSWindows /EP .rrc -> .rc.
-file(WRITE "${PIPL_SCRIPT}" [=[
-@echo off
-setlocal
-set "CL_EXE=@CL_EXE@"
-set "SDK_HEADERS=@SDK_HEADERS@"
-set "PIPL_IN=@PIPL_IN@"
-set "PIPL_RR=@PIPL_RR@"
-set "PIPLTOOL=@PIPLTOOL@"
-set "PIPL_RRC=@PIPL_RRC@"
-set "PIPL_RC=@PIPL_RC@"
-
-"%CL_EXE%" /nologo /I "%SDK_HEADERS%" /EP "%PIPL_IN%" > "%PIPL_RR%"
-if errorlevel 1 exit /b %errorlevel%
-
-"%PIPLTOOL%" "%PIPL_RR%" "%PIPL_RRC%"
-if errorlevel 1 exit /b %errorlevel%
-
-"%CL_EXE%" /nologo /D "MSWindows" /EP "%PIPL_RRC%" > "%PIPL_RC%"
-if errorlevel 1 exit /b %errorlevel%
-
-if not exist "%PIPL_RC%" exit /b 2
-exit /b 0
-]=])
-
-file(READ "${PIPL_SCRIPT}" PIPL_SCRIPT_TEXT)
-string(REPLACE "@CL_EXE@" "${CMAKE_C_COMPILER}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
-string(REPLACE "@SDK_HEADERS@" "${AE_SDK_PATH}/Headers" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
-string(REPLACE "@PIPL_IN@" "${PIPL_R}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
-string(REPLACE "@PIPL_RR@" "${PIPL_RR}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
-string(REPLACE "@PIPLTOOL@" "${PIPLTOOL}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
-string(REPLACE "@PIPL_RRC@" "${PIPL_RRC}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
-string(REPLACE "@PIPL_RC@" "${PIPL_RC}" PIPL_SCRIPT_TEXT "${PIPL_SCRIPT_TEXT}")
-file(WRITE "${PIPL_SCRIPT}" "${PIPL_SCRIPT_TEXT}")
-
+# Match MAJEED's proven, deterministic Python PiPL generation pipeline.
 add_custom_command(
-    OUTPUT "${PIPL_RC}"
-    COMMAND cmd.exe /C call "${PIPL_SCRIPT}"
-    DEPENDS "${PIPL_R}" "${PIPLTOOL}"
+    OUTPUT "${PIPL_RC}" "${PIPL_BIN}"
+    COMMAND "${Python3_EXECUTABLE}" "${PIPL_PY}"
+            --header "${XAO_AE_DIR}/XAO_Ascii.h"
+            --rc "${PIPL_RC}"
+            --bin "${PIPL_BIN}"
+    DEPENDS "${XAO_AE_DIR}/XAO_Ascii.h" "${PIPL_PY}"
+    COMMENT "Generating XAO PiPL resource and binary"
     VERBATIM
-    COMMENT "Generating XAO PiPL with Adobe PiPLtool"
 )
 
 add_library(XAO_ASCII SHARED
@@ -96,24 +61,35 @@ add_library(XAO_ASCII SHARED
     "${XAO_CORE_DIR}/src/ascii/AsciiEngine.cpp"
 )
 
-add_dependencies(XAO_ASCII AESDK)
-
 target_include_directories(XAO_ASCII PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}"
     "${XAO_AE_DIR}"
     "${XAO_CORE_DIR}/include"
     ${AESDK_INCLUDE}
 )
 
 target_link_libraries(XAO_ASCII PRIVATE AESDK)
-target_compile_definitions(XAO_ASCII PRIVATE MSWindows _WINDOWS WIN32)
+
+target_compile_definitions(XAO_ASCII PRIVATE
+    MSWindows
+    _WINDOWS
+    WIN32
+    _WIN32
+    _WIN64
+    AE_OS_WIN
+    _CRT_SECURE_NO_WARNINGS
+)
 
 if(MSVC)
-    # Keep the same compiler contract as Dithering MAJEED; Release configuration
-    # supplies the normal optimisation flags through the Visual Studio generator.
-    target_compile_options(XAO_ASCII PRIVATE /W3 /EHsc /permissive-)
+    # Same static MSVC runtime and compiler settings as Dithering MAJEED.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    target_compile_options(XAO_ASCII PRIVATE /W3 /EHsc /MT /O2 /fp:fast)
     target_link_options(XAO_ASCII PRIVATE
-        /SUBSYSTEM:WINDOWS
-        "/DEF:${XAO_AE_DIR}/XAO_Ascii.def"
+        /SUBSYSTEM:WINDOWS,6.00
+        /OSVERSION:6.00
+        /VERSION:6.00
+        /MANIFEST:NO
+        /DEF:${XAO_AE_DIR}/XAO_Ascii.def
     )
 endif()
 
@@ -124,6 +100,15 @@ set_target_properties(XAO_ASCII PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
 )
 
-install(TARGETS XAO_ASCII DESTINATION ".")
+# Keep one canonical build output for the workflow artifact.
+add_custom_command(TARGET XAO_ASCII POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/dist"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:XAO_ASCII>" "${CMAKE_BINARY_DIR}/dist/XAO.aex"
+    COMMENT "Packaging the single XAO.aex output"
+)
