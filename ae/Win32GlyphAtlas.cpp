@@ -108,7 +108,7 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  switch(p.characterSet){case AsciiCharacterSetId::S1Braille:addRange(tokens,seen,0x2800,0x28FF,0);break;case AsciiCharacterSetId::S1Katakana:addRange(tokens,seen,0x30A1,0x30F6,0);break;case AsciiCharacterSetId::S1Blocks:addRange(tokens,seen,0x2580,0x259F,0);break;case AsciiCharacterSetId::S1Quadrants:addRange(tokens,seen,0x2596,0x259F,0);break;case AsciiCharacterSetId::S1BoxDrawing:addRange(tokens,seen,0x2500,0x257F,0);break;default:break;}
  const std::u32string ancient=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψωᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ";
  const std::u32string english=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
- const std::u32string arabic=U"ءآأؤإئابةتثجحخدذرزسشصضطظعغفقكلمنهوىيپچژگک";
+ const std::u32string arabic=U"ءآأؤإئابةتثجحخدذرزسشصضطظعغفقكلمنهوىيپچژگکی";
  if(p.ancientLetters){addText(tokens,seen,ancient,ancientFont,ancientScale,true);addRange(tokens,seen,0x1681,0x169A,ancientFont,false,ancientScale,true);addRange(tokens,seen,0x10330,0x1034A,ancientFont,false,ancientScale,true);addRange(tokens,seen,0x10900,0x10915,ancientFont,false,ancientScale,true);}
  if(p.ancientNumbers)addText(tokens,seen,U"ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫ",ancientFont,ancientScale,true);
  if(p.ancientWords)addWords(tokens,ancient,p.randomSeed^0xA11CEu,ancientFont,false,ancientScale,true);
