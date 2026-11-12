@@ -1,0 +1,69 @@
+name: XAO ASCII engine
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ae_sdk_path:
+        description: "Path to the After Effects SDK on the Windows runner (leave empty to skip the AEX build)"
+        required: false
+        default: ""
+
+jobs:
+  core-tests:
+    name: Core build and regression tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build core, tests and offline renderer
+        run: make -j"$(nproc)" all
+
+      - name: Core tests
+        run: ./build/xao_core_tests
+
+      - name: ASCII regression tests
+        run: ./build/ascii_tests
+
+      - name: Upload offline renderer
+        uses: actions/upload-artifact@v4
+        with:
+          name: xao_ascii_cli-linux
+          path: build/xao_ascii_cli
+          if-no-files-found: error
+
+  windows-aex:
+    name: Windows x64 AEX build
+    runs-on: windows-latest
+    # The After Effects SDK cannot be downloaded automatically: it is licensed
+    # by Adobe. Provide its path to build the plug-in binary.
+    if: ${{ github.event.inputs.ae_sdk_path != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S ae -B build-aex -G "Visual Studio 17 2022" -A x64
+          -DAE_SDK_PATH="${{ github.event.inputs.ae_sdk_path }}"
+
+      - name: Build
+        run: cmake --build build-aex --config Release
+
+      - name: Verify export
+        shell: pwsh
+        run: |
+          $aex = Get-ChildItem -Recurse build-aex -Filter XAO.aex | Select-Object -First 1
+          if (-not $aex) { throw "XAO.aex was not produced" }
+          Write-Host "Built $($aex.FullName) ($($aex.Length) bytes)"
+          $bytes = [System.IO.File]::ReadAllBytes($aex.FullName)
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if ($text -notmatch "EffectMain") { throw "EffectMain export missing" }
+          if ($text -notmatch "XAO ASCII") { throw "PiPL name missing" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XAO-aex-win64
+          path: build-aex/**/XAO.aex
+          if-no-files-found: error

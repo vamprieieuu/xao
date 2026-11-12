@@ -1,0 +1,10 @@
+build/
+build-aex/
+refs/frames/
+refs/out/
+*.o
+*.a
+*.obj
+*.pdb
+*.ilk
+.DS_Store
