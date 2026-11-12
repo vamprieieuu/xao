@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - xao/recovery-baseline-2026-11-10
+      - xao/ascii-engine-corrections-2026-11-12
   pull_request:
     branches:
       - xao/recovery-baseline-2026-11-10
