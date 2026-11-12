@@ -71,16 +71,38 @@ jobs:
           }
           Write-Host "SDK root: $sdk"
 
-      - name: Configure
+      - name: Report toolchain
+        if: always()
         shell: pwsh
         run: |
-          cmake -S ae -B build-aex -G "Visual Studio 17 2022" -A x64 `
-            -DAE_SDK_PATH="$env:GITHUB_WORKSPACE/.ae-sdk/${{ env.AE_SDK_SUBDIR }}"
+          cmake --version | Tee-Object -FilePath env.log
+          "--- generators ---" | Tee-Object -FilePath env.log -Append
+          cmake --help | Select-String -Pattern "Visual Studio" |
+            Tee-Object -FilePath env.log -Append
+          "--- os ---" | Tee-Object -FilePath env.log -Append
+          "$env:ImageOS" | Tee-Object -FilePath env.log -Append
+
+      - name: Configure
+        if: always()
+        shell: pwsh
+        run: |
+          # The default generator is the newest installed Visual Studio; the
+          # runner image moves, so it is not pinned here.
+          cmake -S ae -B build-aex -A x64 `
+            -DAE_SDK_PATH="$env:GITHUB_WORKSPACE/.ae-sdk/${{ env.AE_SDK_SUBDIR }}" `
+            2>&1 | Tee-Object -FilePath configure.log
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
       - name: Build
-        run: cmake --build build-aex --config Release --parallel
+        if: always()
+        shell: pwsh
+        run: |
+          cmake --build build-aex --config Release --parallel `
+            2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
 
       - name: Verify PE, exports and PiPL
+        if: always()
         shell: pwsh
         run: |
           python tools/verify_aex.py build-aex/bin/Release/XAO.aex `
@@ -109,6 +131,13 @@ jobs:
             $report.aex_sha256 = (Get-FileHash $aex -Algorithm SHA256).Hash
           }
           if (Test-Path verify.txt) { $report.verify = (Get-Content verify.txt -Raw) }
+          foreach ($log in "env.log", "configure.log", "build.log") {
+            if (Test-Path $log) {
+              $text = (Get-Content $log -Raw)
+              if ($text.Length -gt 6000) { $text = $text.Substring($text.Length - 6000) }
+              $report[$log] = $text
+            }
+          }
           $dir = Join-Path $env:RUNNER_TEMP "report"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           Set-Content -Path "$dir/ae-build-report.json" -Encoding utf8 `
@@ -125,6 +154,7 @@ jobs:
           Pop-Location
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: XAO-aex-win64
           path: |
