@@ -221,6 +221,27 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    float mask=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0.0f;
    Pixel base=original;
    if(params_.paletteIndex>0&&params_.paletteIndex<=kS1PaletteCount){const float paperMix=clamp01(params_.asciiAmount/100.0f)*clamp01(params_.asciiStrength/100.0f);base.r=original.r*(1.0f-paperMix)+params_.paper.r*paperMix;base.g=original.g*(1.0f-paperMix)+params_.paper.g*paperMix;base.b=original.b*(1.0f-paperMix)+params_.paper.b*paperMix;}
+   const bool cgoGlow=params_.visualStyle==AsciiVisualStyle::CGO&&((rv&255u)>198u);
+   const bool mosaicGlow=params_.visualStyle==AsciiVisualStyle::Mosaic&&mean>0.48f&&((rv>>5)&1u)!=0u;
+   if(cgoGlow||mosaicGlow){
+    auto sample=[&](float su,float sv){return su>=0.0f&&su<=1.0f&&sv>=0.0f&&sv<=1.0f?maskAt(*glyph,su,sv,params_.antiAliasing):0.0f;};
+    float expanded=mask;
+    constexpr float offsets[]={-0.075f,0.075f,-0.15f,0.15f};
+    for(float oy:offsets)for(float ox:offsets)expanded=std::max(expanded,sample(u+ox,v+oy));
+    const float halo=clamp01(expanded-mask)*(cgoGlow?0.72f:0.42f);
+    const float glowAlpha=halo*(cgoGlow?0.52f:0.28f);
+    const float gr=clamp01(fg.r*1.65f+0.12f),gg=clamp01(fg.g*1.65f+0.12f),gb=clamp01(fg.b*1.65f+0.12f);
+    base.r=base.r*(1.0f-glowAlpha)+gr*glowAlpha;base.g=base.g*(1.0f-glowAlpha)+gg*glowAlpha;base.b=base.b*(1.0f-glowAlpha)+gb*glowAlpha;
+   }
+   if(params_.visualStyle==AsciiVisualStyle::Ghost||params_.visualStyle==AsciiVisualStyle::Rainbow){
+    const float nx=((float)x+0.5f-(float)(x0+x1)*0.5f)/std::max(1.0f,cw);
+    const float ny=((float)y+0.5f-(float)(y0+y1)*0.5f)/std::max(1.0f,ch);
+    const float phase=(float)((rv>>8)&65535u)/65535.0f*6.2831853f;
+    float ray=0.0f;
+    for(int spoke=0;spoke<6;++spoke){const float angle=phase+(float)spoke*1.04719755f;const float along=nx*std::cos(angle)+ny*std::sin(angle);const float across=std::fabs(-nx*std::sin(angle)+ny*std::cos(angle));if(along>0.04f){const float streak=std::exp(-across*115.0f)*std::exp(-std::max(0.0f,along-0.12f)*1.8f)*clamp01(along*2.2f);ray=std::max(ray,streak);}}
+    const float rayAlpha=clamp01(ray)*(params_.visualStyle==AsciiVisualStyle::Ghost?0.22f:0.18f);
+    base.r=base.r*(1.0f-rayAlpha)+clamp01(fg.r*1.8f+0.08f)*rayAlpha;base.g=base.g*(1.0f-rayAlpha)+clamp01(fg.g*1.8f+0.08f)*rayAlpha;base.b=base.b*(1.0f-rayAlpha)+clamp01(fg.b*1.8f+0.08f)*rayAlpha;
+   }
    if(params_.visualStyle==AsciiVisualStyle::Liquid){
     const float radius=std::max(1.0f,std::min(cw,ch)*0.18f),lx=(float)(x-x0)+0.5f,ly=(float)(y-y0)+0.5f;
     const float qx=std::max(radius-lx,std::max(0.0f,lx-(cw-radius))),qy=std::max(radius-ly,std::max(0.0f,ly-(ch-radius)));
