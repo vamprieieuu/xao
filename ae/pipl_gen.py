@@ -89,7 +89,7 @@ def main():
         ("4668", b"EffectMain\0\0"),                         # CodeWin64X86
         ("RVPe", struct.pack("<I", pipl_major)),             # AE_PiPL_Version
         ("RVSe", struct.pack("<HH", spec_major, spec_minor)),  # AE_Effect_Spec_Version
-        ("REVe", effect_version.to_bytes(4, "big")),         # AE_Effect_Version
+        ("REVe", effect_version.to_bytes(4, "little")),         # AE_Effect_Version
         ("FNIe", b"\0\0"),                                   # AE_Effect_Info_Flags
         ("OLGe", struct.pack("<I", out_flags)),              # AE_Effect_Global_OutFlags
         ("2LGe", struct.pack("<I", out_flags2)),             # AE_Effect_Global_OutFlags_2
