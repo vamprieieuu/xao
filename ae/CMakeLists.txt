@@ -105,13 +105,12 @@ target_include_directories(XAO_ASCII PRIVATE
 )
 
 target_link_libraries(XAO_ASCII PRIVATE AESDK)
-target_compile_definitions(XAO_ASCII PRIVATE
-    AE_OS_WIN MSWindows _WINDOWS WIN32 _WIN32 _WIN64
-    AE_PLUGIN_BUILD _CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN
-)
+target_compile_definitions(XAO_ASCII PRIVATE MSWindows _WINDOWS WIN32)
 
 if(MSVC)
-    target_compile_options(XAO_ASCII PRIVATE /W3 /wd5033 /EHsc /MP /O2 /fp:fast)
+    # Keep the same compiler contract as Dithering MAJEED; Release configuration
+    # supplies the normal optimisation flags through the Visual Studio generator.
+    target_compile_options(XAO_ASCII PRIVATE /W3 /EHsc /permissive-)
     target_link_options(XAO_ASCII PRIVATE
         /SUBSYSTEM:WINDOWS
         "/DEF:${XAO_AE_DIR}/XAO_Ascii.def"
