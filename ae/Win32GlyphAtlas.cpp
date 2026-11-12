@@ -118,7 +118,8 @@ std::shared_ptr<const GlyphAtlas> build(const AsciiParams& p){
  if(p.arabicLetters){addText(tokens,seen,arabic,arabicFont,arabicScale,true);addArabicPresentationForms(tokens,seen,arabicFont,arabicScale);}
  if(p.arabicNumbers){if(p.arabicNumberStyle==1)addText(tokens,seen,U"۰۱۲۳۴۵۶۷۸۹",arabicFont,arabicScale,true);else if(p.arabicNumberStyle==2)addText(tokens,seen,U"0123456789",arabicFont,arabicScale,true);else addText(tokens,seen,U"٠١٢٣٤٥٦٧٨٩",arabicFont,arabicScale,true);}
  if(p.arabicWords)addWords(tokens,arabic,p.randomSeed^0xA2AB1Cu,arabicFont,true,arabicScale,true);
- if(p.randomWords&&std::none_of(tokens.begin(),tokens.end(),[](const Token& t){return t.word;})){
+ const bool languageSelection=p.ancientLetters||p.ancientNumbers||p.ancientWords||p.englishLetters||p.englishNumbers||p.englishWords||p.arabicLetters||p.arabicNumbers||p.arabicWords;
+ if(p.randomWords&&!languageSelection&&std::none_of(tokens.begin(),tokens.end(),[](const Token& t){return t.word;})){
   std::u32string pool(asciiCharacterSetCodepoints(p.characterSet));if(pool.empty())pool=U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   addWords(tokens,pool,p.randomSeed^0x574F5244u,0,false,1.0f,false);
  }
