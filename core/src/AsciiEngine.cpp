@@ -216,6 +216,9 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    }
   }
   fg=scaled(fg,alpha);
+  const bool drawRays=params_.visualStyle==AsciiVisualStyle::Ghost||params_.visualStyle==AsciiVisualStyle::Rainbow;
+  std::array<float,6> rayCos{},raySin{};
+  if(drawRays){const float rayPhase=(float)((rv>>8)&65535u)/65535.0f*6.2831853f;for(int spoke=0;spoke<6;++spoke){const float angle=rayPhase+(float)spoke*1.04719755f;rayCos[(std::size_t)spoke]=std::cos(angle);raySin[(std::size_t)spoke]=std::sin(angle);}}
   for(int y=y0;y<y1;++y){Pixel* out=dst.row(y);for(int x=x0;x<drawX1;++x){
    const Pixel& original=src.row(y)[x];float u=(x+.5f-left)/dw,v=(y+.5f-top)/dh;if(flipX)u=1-u;
    float mask=(u>=0&&u<=1&&v>=0&&v<=1)?maskAt(*glyph,u,v,params_.antiAliasing):0.0f;
@@ -226,19 +229,18 @@ void AsciiEngine::render(const Image& src,Image& dst,const RenderContext& ctx) c
    if(cgoGlow||mosaicGlow){
     auto sample=[&](float su,float sv){return su>=0.0f&&su<=1.0f&&sv>=0.0f&&sv<=1.0f?maskAt(*glyph,su,sv,params_.antiAliasing):0.0f;};
     float expanded=mask;
-    constexpr float offsets[]={-0.075f,0.075f,-0.15f,0.15f};
-    for(float oy:offsets)for(float ox:offsets)expanded=std::max(expanded,sample(u+ox,v+oy));
+    constexpr float offsets[]={0.075f,0.15f};
+    for(float d:offsets){expanded=std::max(expanded,sample(u+d,v));expanded=std::max(expanded,sample(u-d,v));expanded=std::max(expanded,sample(u,v+d));expanded=std::max(expanded,sample(u,v-d));}
     const float halo=clamp01(expanded-mask)*(cgoGlow?0.72f:0.42f);
     const float glowAlpha=halo*(cgoGlow?0.52f:0.28f);
     const float gr=clamp01(fg.r*1.65f+0.12f),gg=clamp01(fg.g*1.65f+0.12f),gb=clamp01(fg.b*1.65f+0.12f);
     base.r=base.r*(1.0f-glowAlpha)+gr*glowAlpha;base.g=base.g*(1.0f-glowAlpha)+gg*glowAlpha;base.b=base.b*(1.0f-glowAlpha)+gb*glowAlpha;
    }
-   if(params_.visualStyle==AsciiVisualStyle::Ghost||params_.visualStyle==AsciiVisualStyle::Rainbow){
+   if(drawRays){
     const float nx=((float)x+0.5f-(float)(x0+x1)*0.5f)/std::max(1.0f,cw);
     const float ny=((float)y+0.5f-(float)(y0+y1)*0.5f)/std::max(1.0f,ch);
-    const float phase=(float)((rv>>8)&65535u)/65535.0f*6.2831853f;
     float ray=0.0f;
-    for(int spoke=0;spoke<6;++spoke){const float angle=phase+(float)spoke*1.04719755f;const float along=nx*std::cos(angle)+ny*std::sin(angle);const float across=std::fabs(-nx*std::sin(angle)+ny*std::cos(angle));if(along>0.04f){const float streak=std::exp(-across*115.0f)*std::exp(-std::max(0.0f,along-0.12f)*1.8f)*clamp01(along*2.2f);ray=std::max(ray,streak);}}
+    for(int spoke=0;spoke<6;++spoke){const float cs=rayCos[(std::size_t)spoke],sn=raySin[(std::size_t)spoke];const float along=nx*cs+ny*sn;const float across=std::fabs(-nx*sn+ny*cs);if(along>0.04f){const float streak=std::exp(-across*115.0f)*std::exp(-std::max(0.0f,along-0.12f)*1.8f)*clamp01(along*2.2f);ray=std::max(ray,streak);}}
     const float rayAlpha=clamp01(ray)*(params_.visualStyle==AsciiVisualStyle::Ghost?0.22f:0.18f);
     base.r=base.r*(1.0f-rayAlpha)+clamp01(fg.r*1.8f+0.08f)*rayAlpha;base.g=base.g*(1.0f-rayAlpha)+clamp01(fg.g*1.8f+0.08f)*rayAlpha;base.b=base.b*(1.0f-rayAlpha)+clamp01(fg.b*1.8f+0.08f)*rayAlpha;
    }
