@@ -250,7 +250,8 @@ def check_pipl_metadata(props, header_path):
     # The declared flags must describe what the adapter actually does.
     need(out_flags & (1 << 25), "DEEP_COLOR_AWARE is not declared")
     need(out_flags & (1 << 26), "SEND_UPDATE_PARAMS_UI is not declared")
-    need(not (out_flags2 & (1 << 12)),\n         "FLOAT_COLOR_AWARE must remain disabled until SmartFX is implemented")
+    need(not (out_flags2 & (1 << 12)),
+         "FLOAT_COLOR_AWARE must remain disabled until SmartFX is implemented")
     need(out_flags2 & (1 << 4), "I_AM_THREADSAFE is not declared")
 
 
