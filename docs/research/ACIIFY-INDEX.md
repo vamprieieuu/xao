@@ -21,3 +21,7 @@ Research of the user's `aciify.zip` archive is being recorded here for future XA
 - Distinguish README claims, source inspection, external research, and tests actually run.
 - No claim of build, host loading, render parity, or runtime validation unless performed.
 - Keep source code unchanged until the user explicitly authorizes integration.
+
+
+### Deeper source pass
+- [Folder 08a — YMDithers native core focused analysis](aciify-folder-08a-ymdithers-core-deep-analysis.md)
