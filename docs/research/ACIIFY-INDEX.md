@@ -25,3 +25,5 @@ Research of the user's `aciify.zip` archive is being recorded here for future XA
 
 ### Deeper source pass
 - [Folder 08a — YMDithers native core focused analysis](aciify-folder-08a-ymdithers-core-deep-analysis.md)
+
+- [Folder 02a — Native AEX build scope only](aciify-folder-02a-native-aex-build-scope.md)
